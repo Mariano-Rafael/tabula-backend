@@ -1,6 +1,0 @@
-{
-  "folders": [
-    { "name": "frontend", "path": "." },
-    { "name": "backend", "path": "../tabula-backend" }
-  ]
-}
