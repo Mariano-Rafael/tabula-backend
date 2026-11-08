@@ -1,0 +1,39 @@
+meta {
+  name: 12-Salvar-rascunho
+  type: http
+  seq: 43
+}
+
+put {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/draft
+  body: json
+  auth: none
+}
+
+headers {
+  If-Match: {{draftEtag}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "dialog",
+    "workspace": {
+      "dialog_nodes": []
+    }
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) bru.setVar("draftEtag", res.getHeader("etag"));
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Exemplo DIALOG vazio: substitua pelo JSON completo antes de enviar. If-Match preserva as aspas do ETag.
+}

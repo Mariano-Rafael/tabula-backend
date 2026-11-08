@@ -172,7 +172,7 @@ public class FlowService {
         return value;
     }
 
-    private static long revision(String value) {
+    static long revision(String value) {
         if (value == null) {
             throw error(HttpStatus.PRECONDITION_REQUIRED, "DRAFT_REVISION_REQUIRED", "Envie If-Match com o ETag do rascunho.");
         }

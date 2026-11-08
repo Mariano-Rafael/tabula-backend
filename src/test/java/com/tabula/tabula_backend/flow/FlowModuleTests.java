@@ -61,6 +61,7 @@ class FlowModuleTests {
     @MockitoBean FlowLayoutStore layouts;
     @Autowired FlowLayoutService layoutService;
     @Autowired FlowDiagramService diagrams;
+    @Autowired DialogNodeEditService nodeEdits;
     private final Map<String, com.tabula.tabula_backend.flow.dto.FlowLayoutDtos.Stored> layoutData = new ConcurrentHashMap<>();
     private final Map<String, Snapshot> stored = new ConcurrentHashMap<>();
     private final Map<String, Draft> drafts = new ConcurrentHashMap<>();
@@ -115,6 +116,94 @@ class FlowModuleTests {
     }
 
     private static final String LAYOUT = "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"node_1\",\"position\":{\"x\":12.5,\"y\":-20},\"collapsed\":false}],\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1}}";
+
+    private static final String EDITABLE_RAW = """
+        {"type":"dialog","future_skill":{"kept":true},"workspace":{"future_workspace":{"kept":true},"dialog_nodes":[
+          {"dialog_node":"node_1","title":"Original","conditions":"#old","metadata":{"$unknown.key":1234567890.1234567890123456789},
+           "output":{"unknown_output":true,"generic":[
+             {"response_type":"text","selection_policy":"random","values":[{"text":"Old text","future":{"kept":true}},{"text":"Other text"}]},
+             {"response_type":"image","source":"https://example.invalid/image"}]}},
+          {"dialog_node":"node_2","previous_sibling":"node_1","conditions":"true"}
+        ]}}
+        """;
+    private VersionView editableDraft(String key) {
+        var v = service.upload(actor(owner), projectId, new Upload("Editable", FlowType.DIALOG, EDITABLE_RAW), key);
+        service.startDraft(actor(owner), v.flowId(), v.id()); return v;
+    }
+    @Test void nodeCommandPreservesUnknownFieldsPrecisionAndOriginalVersion() throws Exception {
+        var v = editableDraft("node-edit-preservation");
+        layoutService.save(actor(owner), v.flowId(), null, "*", LAYOUT);
+        String body = """
+            {"nodeId":"node_1","title":"Novo titulo","conditions":"#new && @sys-number",
+             "textEdits":[{"responseIndex":0,"valueIndex":0,"text":"Nova resposta"}]}
+            """;
+        mvc.perform(patch("/api/v1/flows/"+v.flowId()+"/draft/dialog-nodes").with(as(owner)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(body))
+                .andExpect(status().isOk()).andExpect(header().string("ETag", "\"2\""))
+                .andExpect(jsonPath("$.workspace.dialog_nodes[0].title").value("Novo titulo"))
+                .andExpect(jsonPath("$.workspace.dialog_nodes[0].output.generic[0].values[0].text").value("Nova resposta"));
+        String expected = EDITABLE_RAW.replace("\"Original\"", "\"Novo titulo\"").replace("#old", "#new && @sys-number").replace("Old text", "Nova resposta");
+        assertThat(codec.checksum(service.draft(actor(owner), v.flowId()).rawJson())).isEqualTo(codec.checksum(expected));
+        assertThat(service.export(actor(owner), v.id())).isEqualTo(EDITABLE_RAW);
+        assertThat(layoutService.find(actor(owner), v.flowId()).revision()).isEqualTo(1);
+        assertThat(diagrams.draft(actor(owner), v.flowId()).readOnly()).isFalse();
+        assertThat(diagrams.version(actor(owner), v.id()).readOnly()).isTrue();
+        verifyNoInteractions(ibm);
+    }
+    @Test void nodeCommandRejectsStaleRevisionsAndNeverPersistsPartialChanges() throws Exception {
+        var v = editableDraft("node-edit-revisions"); String url = "/api/v1/flows/"+v.flowId()+"/draft/dialog-nodes";
+        String body = "{\"nodeId\":\"node_1\",\"title\":\"Novo\"}";
+        mvc.perform(patch(url).with(as(owner)).with(csrf()).contentType("application/json").content(body)).andExpect(status().isPreconditionRequired());
+        nodeEdits.edit(actor(owner), v.flowId(), "\"1\"", body);
+        mvc.perform(patch(url).with(as(owner)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(body)).andExpect(status().isPreconditionFailed());
+        String before = service.draft(actor(owner), v.flowId()).rawJson();
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"2\"", """
+            {"nodeId":"node_1","title":"Nao deve salvar","textEdits":[{"responseIndex":999,"valueIndex":0,"text":"No"}]}
+            """)).isInstanceOf(FlowException.class);
+        assertThat(service.draft(actor(owner), v.flowId()).rawJson()).isEqualTo(before);
+        assertThat(service.draft(actor(owner), v.flowId()).revision()).isEqualTo(2);
+    }
+    @Test void nodeCommandValidatesFieldsResponseTypesAndDuplicateIds() {
+        var v = editableDraft("node-edit-validation");
+        for (String body : List.of("{\"nodeId\":\"node_1\"}", "{\"nodeId\":\"node_1\",\"title\":null}",
+                "{\"nodeId\":\"node_1\",\"parent\":\"node_2\"}", "{\"nodeId\":\"node_1\",\"title\":\"bad!\"}",
+                "{\"nodeId\":\"node_1\",\"conditions\":\"\"}", "{\"nodeId\":\"node_1\",\"textEdits\":[]}",
+                "{\"nodeId\":\"node_1\",\"textEdits\":[{\"responseIndex\":1,\"valueIndex\":0,\"text\":\"No\"}]}",
+                "{\"nodeId\":\"node_1\",\"textEdits\":[{\"responseIndex\":0.5,\"valueIndex\":0,\"text\":\"No\"}]}",
+                "{\"nodeId\":\"missing\",\"title\":\"No\"}")) {
+            assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"1\"", body)).isInstanceOf(FlowException.class);
+        }
+        assertThat(service.draft(actor(owner), v.flowId()).revision()).isEqualTo(1);
+        service.updateDraft(actor(owner), v.flowId(), "\"1\"", EDITABLE_RAW.replace("\"node_2\"", "\"node_1\""));
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"2\"", "{\"nodeId\":\"node_1\",\"title\":\"No\"}"))
+                .isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("DIALOG_NODE_AMBIGUOUS"));
+    }
+    @Test void nodeCommandBlocksComplexNodesDynamicTextsAndActionDocuments() {
+        var v = editableDraft("node-edit-unsupported");
+        String title = "{\"nodeId\":\"node_1\",\"title\":\"Novo\"}";
+        service.updateDraft(actor(owner), v.flowId(), "\"1\"", EDITABLE_RAW.replace("\"dialog_node\":\"node_1\"", "\"dialog_node\":\"node_1\",\"type\":\"frame\""));
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"2\"", title)).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("DIALOG_NODE_EDIT_UNSUPPORTED"));
+        service.updateDraft(actor(owner), v.flowId(), "\"2\"", EDITABLE_RAW.replace("\"text\":\"Old text\"", "\"text\":\"Old text\",\"text_expression\":{\"concat\":[]}"));
+        String textEdit = "{\"nodeId\":\"node_1\",\"textEdits\":[{\"responseIndex\":0,\"valueIndex\":0,\"text\":\"No\"}]}";
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"3\"", textEdit)).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("TEXT_RESPONSE_UNSUPPORTED"));
+        service.updateDraft(actor(owner), v.flowId(), "\"3\"", EDITABLE_RAW);
+        String duplicate = "{\"nodeId\":\"node_1\",\"textEdits\":[{\"responseIndex\":0,\"valueIndex\":0,\"text\":\"One\"},{\"responseIndex\":0,\"valueIndex\":0,\"text\":\"Two\"}]}";
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), v.flowId(), "\"4\"", duplicate)).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("DUPLICATE_TEXT_EDIT"));
+        var action = service.upload(actor(owner), projectId, new Upload("Action", FlowType.ACTION, "{\"type\":\"action\",\"workspace\":{\"actions\":[]}}"), "action-unsupported-key");
+        service.startDraft(actor(owner), action.flowId(), action.id());
+        assertThatThrownBy(() -> nodeEdits.edit(actor(owner), action.flowId(), "\"1\"", title)).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("DIALOG_EDIT_REQUIRED"));
+    }
+    @Test void nodeCommandEnforcesScopeRoleCsrfAndArchive() throws Exception {
+        var v = editableDraft("node-edit-permissions"); String url = "/api/v1/flows/"+v.flowId()+"/draft/dialog-nodes";
+        String body = "{\"nodeId\":\"node_1\",\"title\":\"Novo\"}";
+        mvc.perform(patch(url).with(as(owner)).header("If-Match", "\"1\"").contentType("application/json").content(body)).andExpect(status().isForbidden());
+        mvc.perform(patch(url).with(as(other)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(body)).andExpect(status().isNotFound());
+        portfolios.addMember(actor(owner), portfolioId, new PortfolioDtos.AddMember(UUID.fromString(other.getId()), PortfolioRole.VIEWER));
+        mvc.perform(patch(url).with(as(other)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(body)).andExpect(status().isForbidden());
+        portfolios.changeRole(actor(owner), portfolioId, other.getId(), new PortfolioDtos.ChangeRole(PortfolioRole.EDITOR));
+        mvc.perform(patch(url).with(as(other)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(body)).andExpect(status().isOk());
+        metadata.archive(actor(owner), v.flowId());
+        mvc.perform(patch(url).with(as(owner)).with(csrf()).header("If-Match", "\"2\"").contentType("application/json").content(body)).andExpect(status().isConflict());
+    }
 
     @Test void diagramsAreReadOnlyScopedAndExposeExactSourceRevisions() throws Exception {
         var version = upload("diagram-source-key");

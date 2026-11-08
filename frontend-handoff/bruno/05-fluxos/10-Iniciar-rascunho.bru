@@ -1,0 +1,35 @@
+meta {
+  name: 10-Iniciar-rascunho
+  type: http
+  seq: 41
+}
+
+post {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/draft
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "versionId": "{{versionId}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) bru.setVar("draftEtag", res.getHeader("etag"));
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

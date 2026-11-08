@@ -1,0 +1,39 @@
+meta {
+  name: 01-Criar-usuario
+  type: http
+  seq: 66
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Usuario Bruno",
+    "email": "{{testUserEmail}}",
+    "password": "{{testUserPassword}}",
+    "admin": false
+  }
+}
+
+script:post-response {
+  
+  if (res.getStatus() < 300 && res.getBody().id) bru.setVar("userId", res.getBody().id);
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([201]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

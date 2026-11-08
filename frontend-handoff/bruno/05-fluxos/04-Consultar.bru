@@ -1,0 +1,21 @@
+meta {
+  name: 04-Consultar
+  type: http
+  seq: 35
+}
+
+get {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

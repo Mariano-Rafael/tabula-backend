@@ -134,8 +134,13 @@ public class FlowDiagramProjector {
             }
         }
         diagnostics.add(new Diagnostic("INFO", "STRUCTURAL_PROJECTION_ONLY", "/workspace"));
+        if (dialog && "DRAFT".equals(source)) nodes.replaceAll((id, n) -> {
+            var d = n.data();
+            boolean editable = d.sourceId() != null && !duplicates.contains(d.sourceId()) && "standard".equals(d.original().getOrDefault("type", "standard"));
+            return new Node(n.id(), n.type(), n.position(), n.parentId(), n.style(), new Data(d.label(), d.sourceId(), d.sourceRef(), d.kind(), d.condition(), editable, d.layoutOnly(), d.collapsed(), d.original()));
+        });
         var positioned = overlay(nodes, layout, diagnostics);
-        return new View(1, flowId, source, versionId, draftRevision, checksum, dialog ? "DIALOG" : "ACTION", true, false,
+        return new View(1, flowId, source, versionId, draftRevision, checksum, dialog ? "DIALOG" : "ACTION", positioned.stream().noneMatch(n -> n.data().editable()), false,
                 layout == null ? null : layout.revision(), layout == null || layout.viewport() == null ? new FlowLayoutDtos.Viewport(0.0, 0.0, 1.0) : layout.viewport(),
                 positioned, edges, diagnostics);
     }
@@ -178,7 +183,7 @@ public class FlowDiagramProjector {
                 style.put("height", v.height());
             }
             var d = n.data();
-            var data = new Data(d.label(), d.sourceId(), d.sourceRef(), d.kind(), d.condition(), false, d.layoutOnly(), v != null && Boolean.TRUE.equals(v.collapsed()), d.original());
+            var data = new Data(d.label(), d.sourceId(), d.sourceRef(), d.kind(), d.condition(), d.editable(), d.layoutOnly(), v != null && Boolean.TRUE.equals(v.collapsed()), d.original());
             result.add(new Node(id, n.type(), position, v == null ? null : v.parentId(), style, data));
         }
         // React Flow requires visual parents before children. Layout is already validated as acyclic.

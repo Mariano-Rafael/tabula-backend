@@ -22,7 +22,7 @@ class FlowDiagramProjectorTests {
         assertThat(view.edges().stream().map(Edge::id)).containsExactlyInAnyOrderElementsOf(reordered.edges().stream().map(Edge::id).toList());
         assertThat(view.edges().stream().map(e -> e.data().relation())).containsExactlyInAnyOrder("PARENT", "EVALUATION_ORDER", "JUMP");
         assertThat(view.nodes().stream().filter(n -> "c".equals(n.data().sourceId())).findFirst().orElseThrow().data().sourceRef()).isEqualTo("/workspace/dialog_nodes/0");
-        assertThat(view.readOnly()).isTrue(); assertThat(view.semanticComplete()).isFalse();
+        assertThat(view.readOnly()).isFalse(); assertThat(view.semanticComplete()).isFalse();
     }
     @Test void reportsAmbiguousReferencesAndCyclesWithoutDanglingEdges() {
         var view = diagram(List.of(Map.of("dialog_node", "a", "parent", "b"), Map.of("dialog_node", "b", "parent", "a"),

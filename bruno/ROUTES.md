@@ -53,6 +53,7 @@ Gerado de scripts/generate-bruno.cjs. Consulte README.md antes de executar.
 | 05-fluxos | 16-Salvar-layout | PUT | /flows/{{flowId}}/layout |
 | 05-fluxos | 17-Diagrama-rascunho | GET | /flows/{{flowId}}/diagram |
 | 05-fluxos | 18-Diagrama-versao | GET | /versions/{{versionId}}/diagram |
+| 05-fluxos | 19-Editar-no-Dialog | PATCH | /flows/{{flowId}}/draft/dialog-nodes |
 | 06-conversas | 01-Abrir | POST | /projects/{{projectId}}/conversations |
 | 06-conversas | 02-Listar | GET | /projects/{{projectId}}/conversations?page=0&size=20 |
 | 06-conversas | 03-Consultar | GET | /conversations/{{conversationId}} |

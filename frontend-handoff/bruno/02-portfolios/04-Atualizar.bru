@@ -1,0 +1,32 @@
+meta {
+  name: 04-Atualizar
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/portfolios/{{portfolioId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Portfolio Bruno atualizado",
+    "description": "Testes manuais"
+  }
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

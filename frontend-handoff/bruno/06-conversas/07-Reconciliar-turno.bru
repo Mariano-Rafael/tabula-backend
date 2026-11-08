@@ -1,0 +1,21 @@
+meta {
+  name: 07-Reconciliar-turno
+  type: http
+  seq: 57
+}
+
+post {
+  url: {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages/{{turnId}}/reconcile
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200,202,422]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

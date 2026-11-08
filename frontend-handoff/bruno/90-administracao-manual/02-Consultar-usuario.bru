@@ -1,0 +1,21 @@
+meta {
+  name: 02-Consultar-usuario
+  type: http
+  seq: 67
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/users/{{userId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

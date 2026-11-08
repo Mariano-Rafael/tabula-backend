@@ -1,0 +1,21 @@
+meta {
+  name: 06-Testar-integracao
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/integrations/{{integrationId}}/connection-tests
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

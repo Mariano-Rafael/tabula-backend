@@ -1,0 +1,45 @@
+meta {
+  name: 19-Editar-no-Dialog
+  type: http
+  seq: 50
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/draft/dialog-nodes
+  body: json
+  auth: none
+}
+
+headers {
+  If-Match: {{draftEtag}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nodeId": "{{dialogNodeId}}",
+    "title": "Titulo atualizado",
+    "conditions": "#intent",
+    "textEdits": [
+      {
+        "responseIndex": 0,
+        "valueIndex": 0,
+        "text": "Resposta atualizada"
+      }
+    ]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) bru.setVar("draftEtag", res.getHeader("etag"));
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Edicao local de no standard existente. Use data.sourceId do diagrama como dialogNodeId, e nao nodes[].id. Omita campos que nao deseja alterar. textEdits exige resposta text com values[].text literal nos indices indicados; nao cria respostas. Usa ETag do rascunho. Retorna JSON completo atualizado, sem aplicar na IBM.
+}

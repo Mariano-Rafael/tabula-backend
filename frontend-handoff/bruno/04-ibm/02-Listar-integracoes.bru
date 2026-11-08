@@ -1,0 +1,21 @@
+meta {
+  name: 02-Listar-integracoes
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{baseUrl}}/api/v1/portfolios/{{portfolioId}}/integrations
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

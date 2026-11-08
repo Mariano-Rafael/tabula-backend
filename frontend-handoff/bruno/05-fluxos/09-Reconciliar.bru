@@ -1,0 +1,21 @@
+meta {
+  name: 09-Reconciliar
+  type: http
+  seq: 40
+}
+
+post {
+  url: {{baseUrl}}/api/v1/versions/{{versionId}}/reconcile
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

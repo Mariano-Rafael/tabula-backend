@@ -15,8 +15,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class IbmConversationGateway {
     public record Binding(String mode, String workspaceId, String assistantId, String environmentId, String version, IbmConnectionRef connection) {
-        public Binding(String mode, String workspaceId, String assistantId, String environmentId, String version) { this(mode, workspaceId, assistantId, environmentId, version, null); }
-        public Binding withConnection(IbmConnectionRef ref) { return new Binding(mode, workspaceId, assistantId, environmentId, version, ref); }
+        public Binding(String mode, String workspaceId, String assistantId, String environmentId, String version) {
+            this(mode, workspaceId, assistantId, environmentId, version, null);
+        }
+
+        public Binding withConnection(IbmConnectionRef ref) {
+            return new Binding(mode, workspaceId, assistantId, environmentId, version, ref);
+        }
     }
 
     public record Reply(Map<String, Object> raw, Map<String, Object> context, List<Map<String, Object>> output) {
@@ -29,6 +34,7 @@ public class IbmConversationGateway {
     public IbmConversationGateway(IbmHttpTransport http, IbmTokenProvider tokens) {
         this(http, tokens, null);
     }
+
     @org.springframework.beans.factory.annotation.Autowired
     public IbmConversationGateway(IbmHttpTransport http, IbmTokenProvider tokens, IbmClientFactory clients) {
         this.http = http;
@@ -63,7 +69,8 @@ public class IbmConversationGateway {
 
     public Reply message(Binding b, String sessionId, String conversationId, String text, Map<String, Object> previousContext) {
         var client = client(b);
-        var http = client.http(); var tokens = client.tokens();
+        var http = client.http();
+        var tokens = client.tokens();
         final Map<String, Object> response;
         if ("V1".equals(b.mode())) {
             response = call(tokens, () -> http.post("/v1/workspaces/" + IbmEndpointPolicy.identifier(b.workspaceId()) + "/message",
@@ -122,7 +129,10 @@ public class IbmConversationGateway {
         return new Reply(response, context, List.copyOf(normalized));
     }
 
-    private IbmClientFactory.Clients client(Binding b) { return clients == null ? new IbmClientFactory.Clients(http, tokens) : clients.clients(b.connection()); }
+    private IbmClientFactory.Clients client(Binding b) {
+        return clients == null ? new IbmClientFactory.Clients(http, tokens) : clients.clients(b.connection());
+    }
+
     private <T> T call(IbmTokenProvider tokens, Supplier<T> action) {
         try {
             return action.get();

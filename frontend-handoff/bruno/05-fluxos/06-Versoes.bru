@@ -1,0 +1,21 @@
+meta {
+  name: 06-Versoes
+  type: http
+  seq: 37
+}
+
+get {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/versions?page=0&size=20
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

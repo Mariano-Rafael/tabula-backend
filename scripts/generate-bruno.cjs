@@ -29,6 +29,7 @@ fs.writeFileSync(path.join(root,'environments/Local.example.bru'), `vars {
   ibmEnvironmentId: REPLACE_ME
   ibmDialogSkillId:
   ibmActionSkillId:
+  dialogNodeId: REPLACE_WITH_IBM_NODE_ID
 }
 `);
 let seq=0; const inventory=[];
@@ -98,6 +99,7 @@ add('05-fluxos','15-Ler-layout','GET','/flows/{{flowId}}/layout',null,layoutEtag
 add('05-fluxos','16-Salvar-layout','PUT','/flows/{{flowId}}/layout',layoutBody,{...layoutEtag,headers:{'If-Match':'{{layoutEtag}}'},doc:'Substitui integralmente o layout atual. ETag layout-N e independente do draftEtag. Nao envie data/edges ou o objeto completo do React Flow.'});
 add('05-fluxos','17-Diagrama-rascunho','GET','/flows/{{flowId}}/diagram',null,{doc:'Requer rascunho existente. Projecao estrutural somente leitura, combinada com o layout atual. Use nodes[].id para salvar posicoes. Inspecione diagnostics; Actions ainda nao projetam passos internos.'});
 add('05-fluxos','18-Diagrama-versao','GET','/versions/{{versionId}}/diagram',null,{doc:'Requer versao READY. Usa JSON imutavel e layout atual do fluxo; nao e um snapshot historico do layout. Nenhuma chamada IBM e feita.'});
+add('05-fluxos','19-Editar-no-Dialog','PATCH','/flows/{{flowId}}/draft/dialog-nodes',{nodeId:'{{dialogNodeId}}',title:'Titulo atualizado',conditions:'#intent',textEdits:[{responseIndex:0,valueIndex:0,text:'Resposta atualizada'}]},{...etag,headers:{'If-Match':'{{draftEtag}}'},doc:'Edicao local de no standard existente. Use data.sourceId do diagrama como dialogNodeId, e nao nodes[].id. Omita campos que nao deseja alterar. textEdits exige resposta text com values[].text literal nos indices indicados; nao cria respostas. Usa ETag do rascunho. Retorna JSON completo atualizado, sem aplicar na IBM.'});
 add('06-conversas','01-Abrir','POST','/projects/{{projectId}}/conversations',{targetId:'{{targetId}}',mode:'{{mode}}'},{capture:'conversationId',status:[200,201,202],headers:{'Idempotency-Key':'{{openKey}}'}});
 add('06-conversas','02-Listar','GET','/projects/{{projectId}}/conversations?page=0&size=20');
 add('06-conversas','03-Consultar','GET','/conversations/{{conversationId}}');

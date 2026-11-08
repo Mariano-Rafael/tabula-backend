@@ -1,0 +1,31 @@
+meta {
+  name: 04-Atualizar-minha-conta
+  type: http
+  seq: 69
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/account
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Nome atualizado"
+  }
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

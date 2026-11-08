@@ -1,0 +1,21 @@
+meta {
+  name: Arquivar-projeto
+  type: http
+  seq: 75
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([204]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

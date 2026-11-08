@@ -35,10 +35,11 @@ class LocalFlowLayoutTests {
     @Autowired FlowLayoutService layouts;
     @Autowired FlowLayoutStore layoutStore;
     @Autowired FlowJsonCodec codec;
+    @Autowired DialogNodeEditService nodeEdits;
     @Autowired FlowRepository flowRepository;
     @Autowired FlowVersionRepository versions;
     @Autowired FlowWriteRepository outbox;
-    private static final String RAW = "{\"type\":\"dialog\",\"workspace\":{\"dialog_nodes\":[]},\"unknown\":{\"$a.b\":true}}";
+    private static final String RAW = "{\"type\":\"dialog\",\"workspace\":{\"dialog_nodes\":[{\"dialog_node\":\"node_1\",\"title\":\"Original\",\"output\":{\"generic\":[{\"response_type\":\"text\",\"values\":[{\"text\":\"Old\",\"future\":true}]}]}}]},\"unknown\":{\"$a.b\":true}}";
     private static final String LAYOUT = "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"group\",\"position\":{\"x\":0,\"y\":0}},{\"id\":\"a\",\"position\":{\"x\":12,\"y\":34},\"parentId\":\"group\"}],\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1}}";
     @Test void mongoPersistsGroupsAndAtomicallyRejectsConcurrentWrites() throws Exception {
         var account = users.saveAndFlush(new AccountUser("Layout temporary admin", "layout-"+ UUID.randomUUID()+"@example.invalid", "unused", true));
@@ -79,6 +80,25 @@ class LocalFlowLayoutTests {
             assertThat(flows.draft(actor, flowId).rawJson()).isEqualTo(RAW);
             assertThat(flows.draft(actor, flowId).revision()).isEqualTo(1);
             System.out.println("LAYOUT_LOCAL PERSIST_GROUPS_CONCURRENT_CAS_IBM_JSON_UNCHANGED OK");
+            var edited = nodeEdits.edit(actor, flowId, "\"1\"", "{\"nodeId\":\"node_1\",\"title\":\"Novo titulo\",\"textEdits\":[{\"responseIndex\":0,\"valueIndex\":0,\"text\":\"New\"}]}" );
+            assertThat(edited.revision()).isEqualTo(2);
+            assertThat(codec.checksum(edited.rawJson())).isEqualTo(codec.checksum(RAW.replace("Original", "Novo titulo").replace("Old", "New")));
+            var editStart = new CountDownLatch(1);
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                List<Future<Boolean>> edits = new ArrayList<>();
+                for (String title : List.of("Writer One", "Writer Two")) edits.add(executor.submit(() -> {
+                    if (!editStart.await(5, TimeUnit.SECONDS)) throw new AssertionError("Start timeout");
+                    try { nodeEdits.edit(actor, testFlow, "\"2\"", "{\"nodeId\":\"node_1\",\"title\":\""+title+"\"}"); return true; }
+                    catch (FlowException ex) { if (!"DRAFT_REVISION_MISMATCH".equals(ex.code())) throw ex; return false; }
+                }));
+                editStart.countDown(); int successes = 0;
+                for (var edit : edits) if (edit.get(15, TimeUnit.SECONDS)) successes++;
+                assertThat(successes).isEqualTo(1);
+            }
+            assertThat(flows.draft(actor, flowId).revision()).isEqualTo(3);
+            assertThat(layouts.find(actor, flowId).revision()).isEqualTo(3);
+            assertThat(flows.export(actor, original.id())).isEqualTo(RAW);
+            System.out.println("LAYOUT_LOCAL DIALOG_NODE_EDIT_CONCURRENT_CAS_ORIGINAL_PRESERVED OK");
         } finally {
             if (flowId != null) {
                 var db = mongo.getDatabase(database);

@@ -1,0 +1,37 @@
+meta {
+  name: 04-Enviar-mensagem
+  type: http
+  seq: 54
+}
+
+post {
+  url: {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages
+  body: json
+  auth: none
+}
+
+headers {
+  Idempotency-Key: {{messageKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "text": "{{message}}"
+  }
+}
+
+script:post-response {
+  
+  if (res.getStatus() < 300 && res.getBody().id) bru.setVar("turnId", res.getBody().id);
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200,202,422]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Chamada real IBM. Defina uma mensagem segura. Reenvio identico usa a mesma chave; nova mensagem exige nova chave. 202 e 422 exigem inspecao do estado.
+}

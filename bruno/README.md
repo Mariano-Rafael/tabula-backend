@@ -1,6 +1,6 @@
 # Tabula — testes manuais no Bruno
 
-Abra esta pasta em **Open Collection** no Bruno. A collection contém 76 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
+Abra esta pasta em **Open Collection** no Bruno. A collection contém 77 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
 
 ## Preparação
 
@@ -28,6 +28,8 @@ Execute requisições individualmente. Não execute a collection inteira: existe
 Para layouts, use `14-Criar-layout`, `15-Ler-layout` e `16-Salvar-layout` em `05-fluxos`. O primeiro PUT exige `If-None-Match: *`; os demais usam o ETag `layout-N` capturado em `layoutEtag`. As revisões visuais são independentes de `draftEtag`. Salvar posições/grupos/viewport não altera o conteúdo IBM nem cria elementos de diálogo. Veja [o contrato do layout](../docs/18-layouts-visuais-react-flow.md).
 
 `17-Diagrama-rascunho` e `18-Diagrama-versao` retornam a projeção estrutural e o layout atual. Use os IDs retornados em `nodes[].id` nas posições do layout. Rascunho precisa ser inicializado; versão precisa estar READY. Inspecione `diagnostics`; Actions ainda não exibem passos internos. A projeção é somente leitura e não aciona IBM. Veja [o contrato do diagrama](../docs/19-projecao-de-diagramas.md).
+
+`19-Editar-no-Dialog` altera título, condição e textos literais existentes de nó standard no rascunho, usando `draftEtag`. Preencha `dialogNodeId` com **data.sourceId**, o ID IBM do nó, e os índices reais da resposta/variação. Omita os campos que não quer alterar. O novo ETag é capturado; o JSON original, layout e a IBM permanecem intactos. Veja [o contrato de edição](../docs/21-edicao-semantica-dialog.md).
 
 Troque cada chave `*-CHANGE-ME-001` antes de iniciar um novo cenário. Mantenha a mesma chave e o mesmo corpo ao repetir uma operação incerta. Nova conversa, nova mensagem, nova importação/upload e novo snapshot exigem novas chaves. A mesma chave com corpo diferente retorna conflito. Não gere automaticamente uma chave nova ao reenviar: isso pode duplicar efeitos na IBM.
 

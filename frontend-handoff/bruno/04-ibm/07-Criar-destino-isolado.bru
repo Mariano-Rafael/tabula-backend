@@ -1,0 +1,47 @@
+meta {
+  name: 07-Criar-destino-isolado
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}/targets
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "integrationId": "{{integrationId}}",
+    "configuration": {
+      "name": "Draft da instancia",
+      "environmentType": "DRAFT",
+      "assistantId": "{{ibmAssistantId}}",
+      "environmentId": "{{ibmEnvironmentId}}",
+      "dialogWorkspaceId": null,
+      "dialogSkillId": "{{ibmDialogSkillId}}",
+      "actionSkillId": "{{ibmActionSkillId}}",
+      "v1Version": "2021-11-27",
+      "v2Version": "2024-08-25"
+    }
+  }
+}
+
+script:post-response {
+  
+  if (res.getStatus() < 300 && res.getBody().id) bru.setVar("targetId", res.getBody().id);
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([201]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Alternativa ao destino baseado nos defaults globais. Informe IDs da instancia cadastrada no portfolio. Nao copia IDs do properties.
+}

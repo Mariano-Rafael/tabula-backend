@@ -1,0 +1,10 @@
+meta {
+  name: Tabula Backend
+}
+
+script:pre-request {
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.getMethod())) {
+    const token = bru.getVar("csrfToken");
+    if (token) req.setHeader(bru.getVar("csrfHeader") || "X-CSRF-TOKEN", token);
+  }
+}

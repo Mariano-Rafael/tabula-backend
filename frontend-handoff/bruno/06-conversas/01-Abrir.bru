@@ -1,0 +1,38 @@
+meta {
+  name: 01-Abrir
+  type: http
+  seq: 51
+}
+
+post {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}/conversations
+  body: json
+  auth: none
+}
+
+headers {
+  Idempotency-Key: {{openKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "targetId": "{{targetId}}",
+    "mode": "{{mode}}"
+  }
+}
+
+script:post-response {
+  
+  if (res.getStatus() < 300 && res.getBody().id) bru.setVar("conversationId", res.getBody().id);
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200,201,202]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

@@ -1,0 +1,25 @@
+meta {
+  name: 05-Defaults-Draft
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/api/v1/integrations/{{integrationId}}/defaults?environmentType=DRAFT
+  body: none
+  auth: none
+}
+
+script:post-response {
+  if (res.getStatus() === 200) bru.setVar("targetConfiguration", JSON.stringify(res.getBody()));
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

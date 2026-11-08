@@ -1,0 +1,30 @@
+meta {
+  name: 13-Snapshot
+  type: http
+  seq: 44
+}
+
+post {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/versions
+  body: none
+  auth: none
+}
+
+headers {
+  If-Match: {{draftEtag}}
+  Idempotency-Key: {{snapshotKey}}
+}
+
+script:post-response {
+  if (res.getStatus() < 300 && res.getBody().id) { bru.setVar("versionId", res.getBody().id); bru.setVar("flowId", res.getBody().flowId); }
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([201,202]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}
