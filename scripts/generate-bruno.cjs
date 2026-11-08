@@ -22,6 +22,13 @@ fs.writeFileSync(path.join(root,'environments/Local.example.bru'), `vars {
   importActionKey: import-action-CHANGE-ME-001
   snapshotKey: snapshot-CHANGE-ME-001
   writeKey: write-CHANGE-ME-001
+  ibmServiceUrl: https://api.us-south.assistant.watson.cloud.ibm.com/instances/REPLACE_ME
+  ibmApiKey:
+  ibmNextApiKey:
+  ibmAssistantId: REPLACE_ME
+  ibmEnvironmentId: REPLACE_ME
+  ibmDialogSkillId:
+  ibmActionSkillId:
 }
 `);
 let seq=0; const inventory=[];
@@ -55,17 +62,20 @@ add('03-projetos','02-Listar','GET','/portfolios/{{portfolioId}}/projects?page=0
 add('03-projetos','03-Consultar','GET','/projects/{{projectId}}');
 add('03-projetos','04-Atualizar','PATCH','/projects/{{projectId}}',{name:'Projeto Bruno atualizado',description:'Teste IBM'});
 add('04-ibm','01-Criar-integracao','POST','/portfolios/{{portfolioId}}/integrations',{name:'IBM properties'},{capture:'integrationId',status:[201]});
+add('04-ibm','01-Criar-integracao-isolada','POST','/portfolios/{{portfolioId}}/integrations',{name:'Instancia IBM do portfolio',serviceUrl:'{{ibmServiceUrl}}',apiKey:'{{ibmApiKey}}'},{capture:'integrationId',status:[201],doc:'Alternativa ao vinculo legado properties. OWNER pode cadastrar endpoint e API key proprios. Uma integracao por portfolio. A API key e criptografada no servidor e nao e devolvida. Configure as variaveis somente no ambiente local ignorado pelo Git.'});
 add('04-ibm','02-Listar-integracoes','GET','/portfolios/{{portfolioId}}/integrations');
 add('04-ibm','03-Consultar-integracao','GET','/integrations/{{integrationId}}');
 add('04-ibm','04-Atualizar-integracao','PATCH','/integrations/{{integrationId}}',{name:'IBM propriedades',active:true});
 add('04-ibm','05-Defaults-Draft','GET','/integrations/{{integrationId}}/defaults?environmentType=DRAFT',null,{post:'if (res.getStatus() === 200) bru.setVar("targetConfiguration", JSON.stringify(res.getBody()));'});
 add('04-ibm','06-Testar-integracao','POST','/integrations/{{integrationId}}/connection-tests');
 add('04-ibm','07-Criar-destino','POST','/projects/{{projectId}}/targets','{ "integrationId": "{{integrationId}}", "configuration": {{targetConfiguration}} }',{capture:'targetId',status:[201]});
+add('04-ibm','07-Criar-destino-isolado','POST','/projects/{{projectId}}/targets',{integrationId:'{{integrationId}}',configuration:{name:'Draft da instancia',environmentType:'DRAFT',assistantId:'{{ibmAssistantId}}',environmentId:'{{ibmEnvironmentId}}',dialogWorkspaceId:null,dialogSkillId:'{{ibmDialogSkillId}}',actionSkillId:'{{ibmActionSkillId}}',v1Version:'2021-11-27',v2Version:'2024-08-25'}},{capture:'targetId',status:[201],doc:'Alternativa ao destino baseado nos defaults globais. Informe IDs da instancia cadastrada no portfolio. Nao copia IDs do properties.'});
 add('04-ibm','08-Listar-destinos','GET','/projects/{{projectId}}/targets');
 add('04-ibm','09-Consultar-destino','GET','/targets/{{targetId}}');
 add('04-ibm','10-Atualizar-destino','PUT','/targets/{{targetId}}','{{targetConfiguration}}');
 add('04-ibm','11-Capacidades','GET','/targets/{{targetId}}/capabilities');
 add('04-ibm','12-Testar-destino','POST','/targets/{{targetId}}/connection-tests');
+add('04-ibm','13-Rotacionar-credencial','PUT','/integrations/{{integrationId}}/credentials',{apiKey:'{{ibmNextApiKey}}'},{doc:'Somente OWNER/admin, com CSRF. Substitui a API key de uma integracao DATABASE; endpoint nao muda. Invalidacao do cache ocorre na proxima chamada. Nao modifica a API key configurada no properties.'});
 const version={status:[201,202],post:'if (res.getStatus() < 300 && res.getBody().id) { bru.setVar("versionId", res.getBody().id); bru.setVar("flowId", res.getBody().flowId); }'};
 for(const type of ['DIALOG','ACTION']) add('05-fluxos','01-Importar-'+type,'POST','/projects/{{projectId}}/imports',{targetId:'{{targetId}}',type,name:'Importacao '+type},{...version,headers:{'Idempotency-Key':type==='DIALOG'?'{{importDialogKey}}':'{{importActionKey}}'},doc:'Pode retornar 202 IBM_EXPORT_PENDING. Repita com a mesma chave e corpo. Atualiza flowId/versionId; trabalhe em um fluxo por vez.'});
 add('05-fluxos','02-Upload','POST','/projects/{{projectId}}/flows',{name:'Dialog local',type:'DIALOG',json:JSON.stringify({type:'dialog',workspace:{dialog_nodes:[]}})},{...version,headers:{'Idempotency-Key':'{{uploadKey}}'}});
@@ -81,6 +91,13 @@ add('05-fluxos','10-Iniciar-rascunho','POST','/flows/{{flowId}}/draft',{versionI
 add('05-fluxos','11-Ler-rascunho','GET','/flows/{{flowId}}/draft',null,etag);
 add('05-fluxos','12-Salvar-rascunho','PUT','/flows/{{flowId}}/draft',{type:'dialog',workspace:{dialog_nodes:[]}},{...etag,headers:{'If-Match':'{{draftEtag}}'},doc:'Exemplo DIALOG vazio: substitua pelo JSON completo antes de enviar. If-Match preserva as aspas do ETag.'});
 add('05-fluxos','13-Snapshot','POST','/flows/{{flowId}}/versions',null,{...version,headers:{'If-Match':'{{draftEtag}}','Idempotency-Key':'{{snapshotKey}}'}});
+const layoutBody = {schemaVersion:1,nodes:[{id:'node_1',position:{x:100,y:200},collapsed:false}],viewport:{x:0,y:0,zoom:1}};
+const layoutEtag = {post:'if (res.getStatus() < 300) bru.setVar("layoutEtag", res.getHeader("etag"));'};
+add('05-fluxos','14-Criar-layout','PUT','/flows/{{flowId}}/layout',layoutBody,{...layoutEtag,status:[201],headers:{'If-None-Match':'*'},doc:'Cria somente metadados visuais. Substitua node_1 pelo ID visual escolhido. Nao altera o JSON IBM nem cria elementos de dialogo. 412 se layout ja existir: consulte e use If-Match.'});
+add('05-fluxos','15-Ler-layout','GET','/flows/{{flowId}}/layout',null,layoutEtag);
+add('05-fluxos','16-Salvar-layout','PUT','/flows/{{flowId}}/layout',layoutBody,{...layoutEtag,headers:{'If-Match':'{{layoutEtag}}'},doc:'Substitui integralmente o layout atual. ETag layout-N e independente do draftEtag. Nao envie data/edges ou o objeto completo do React Flow.'});
+add('05-fluxos','17-Diagrama-rascunho','GET','/flows/{{flowId}}/diagram',null,{doc:'Requer rascunho existente. Projecao estrutural somente leitura, combinada com o layout atual. Use nodes[].id para salvar posicoes. Inspecione diagnostics; Actions ainda nao projetam passos internos.'});
+add('05-fluxos','18-Diagrama-versao','GET','/versions/{{versionId}}/diagram',null,{doc:'Requer versao READY. Usa JSON imutavel e layout atual do fluxo; nao e um snapshot historico do layout. Nenhuma chamada IBM e feita.'});
 add('06-conversas','01-Abrir','POST','/projects/{{projectId}}/conversations',{targetId:'{{targetId}}',mode:'{{mode}}'},{capture:'conversationId',status:[200,201,202],headers:{'Idempotency-Key':'{{openKey}}'}});
 add('06-conversas','02-Listar','GET','/projects/{{projectId}}/conversations?page=0&size=20');
 add('06-conversas','03-Consultar','GET','/conversations/{{conversationId}}');

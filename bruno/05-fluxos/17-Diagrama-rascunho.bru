@@ -1,0 +1,21 @@
+meta {
+  name: 17-Diagrama-rascunho
+  type: http
+  seq: 48
+}
+
+get {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/diagram
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Requer rascunho existente. Projecao estrutural somente leitura, combinada com o layout atual. Use nodes[].id para salvar posicoes. Inspecione diagnostics; Actions ainda nao projetam passos internos.
+}

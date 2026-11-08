@@ -127,6 +127,20 @@ class SkillWriteModuleTests {
         assertThat(service.reconcile(actor, op.id()).state()).isEqualTo("UNKNOWN");
         verify(gateway, never()).update(any(), anyMap());
     }
+    @Test void rateLimitedPreflightPreservesReadyAndCanBeExplicitlyRetried() {
+        var op = prepare("prepare-key-001");
+        doThrow(new IntegrationException(HttpStatus.SERVICE_UNAVAILABLE, "IBM_RATE_LIMITED", "limited")).when(exports).exportSkill(anyString(), anyString(), anyString(), anyString());
+        var deferred = service.apply(actor, op.id());
+        assertThat(deferred.state()).isEqualTo("READY");
+        assertThat(deferred.errorCode()).isEqualTo("IBM_RATE_LIMITED");
+        verifyNoInteractions(gateway);
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM ibm_skill_write_locks", Integer.class)).isZero();
+        doReturn(Map.of("workspace", BEFORE)).when(exports).exportSkill(anyString(), anyString(), anyString(), anyString());
+        var dispatched = service.apply(actor, op.id());
+        assertThat(dispatched.state()).isEqualTo("PROCESSING");
+        assertThat(dispatched.errorCode()).isNull();
+        verify(gateway, times(1)).update(any(), anyMap());
+    }
     @Test void explicitProviderRejectionFailsAndReleasesLock() {
         var op = prepare("prepare-key-001");
         doThrow(new IntegrationException(HttpStatus.BAD_GATEWAY, "IBM_PERMISSION_DENIED", "denied")).when(gateway).update(any(), anyMap());

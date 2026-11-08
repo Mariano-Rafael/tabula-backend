@@ -1,8 +1,10 @@
 # Tabula — testes manuais no Bruno
 
-Abra esta pasta em **Open Collection** no Bruno. A collection contém 68 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
+Abra esta pasta em **Open Collection** no Bruno. A collection contém 76 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
 
 ## Preparação
+
+Para conexões próprias por portfólio, escolha `01-Criar-integracao-isolada` e `07-Criar-destino-isolado` em `04-ibm`. As alternativas com mesmo prefixo não devem ser executadas juntas. Configure `ibmServiceUrl`, `ibmApiKey`, `ibmAssistantId`, `ibmEnvironmentId` e skills no ambiente local. OWNER pode cadastrar a própria conexão; o vínculo legado properties exige administrador global. Defaults de uma conexão isolada não copiam IDs do servidor. Use `13-Rotacionar-credencial` somente quando quiser substituir a API key, preenchendo `ibmNextApiKey`. Consulte [o contrato](../docs/20-instancias-ibm-por-portfolio.md).
 
 1. Copie `environments/Local.example.bru` para `environments/Local.bru` e selecione `Local` no Bruno. Preencha `email` e `password` com uma conta existente. Nunca coloque a API key IBM na collection: a aplicação usa o `.env` do servidor.
 2. Inicie MySQL, MongoDB e o backend a partir da raiz do projeto. Para HTTP local, defina `SESSION_COOKIE_SECURE=false` no ambiente do processo; em HTTPS mantenha `true`. O backend importa o `.env` raiz como Java Properties.
@@ -23,9 +25,15 @@ Execute requisições individualmente. Não execute a collection inteira: existe
 
 ## Idempotência e concorrência
 
+Para layouts, use `14-Criar-layout`, `15-Ler-layout` e `16-Salvar-layout` em `05-fluxos`. O primeiro PUT exige `If-None-Match: *`; os demais usam o ETag `layout-N` capturado em `layoutEtag`. As revisões visuais são independentes de `draftEtag`. Salvar posições/grupos/viewport não altera o conteúdo IBM nem cria elementos de diálogo. Veja [o contrato do layout](../docs/18-layouts-visuais-react-flow.md).
+
+`17-Diagrama-rascunho` e `18-Diagrama-versao` retornam a projeção estrutural e o layout atual. Use os IDs retornados em `nodes[].id` nas posições do layout. Rascunho precisa ser inicializado; versão precisa estar READY. Inspecione `diagnostics`; Actions ainda não exibem passos internos. A projeção é somente leitura e não aciona IBM. Veja [o contrato do diagrama](../docs/19-projecao-de-diagramas.md).
+
 Troque cada chave `*-CHANGE-ME-001` antes de iniciar um novo cenário. Mantenha a mesma chave e o mesmo corpo ao repetir uma operação incerta. Nova conversa, nova mensagem, nova importação/upload e novo snapshot exigem novas chaves. A mesma chave com corpo diferente retorna conflito. Não gere automaticamente uma chave nova ao reenviar: isso pode duplicar efeitos na IBM.
 
 Mensagens em `UNKNOWN` e conversas em estados incertos exigem inspeção/reconciliação. A reconciliação não reenvia mensagens. Não presuma que 202 confirma processamento. Ao sair do Bruno, as variáveis capturadas em memória podem ser perdidas; consulte listagens e preencha os IDs novamente, sem recriar recursos por engano.
+
+Na autoria Draft, `READY` com `errorCode=IBM_RATE_LIMITED` significa que a leitura anterior ao envio foi adiada: aguarde antes de repetir apply da mesma operação. Se já estiver `PROCESSING`/`UNKNOWN`, use reconcile, sem criar outra escrita. A validação real encontrou rate limit na exportação usada para confirmar o conteúdo; aguardar e consultar novamente permitiu confirmar e restaurar o Dialog.
 
 ## Manutenção e validação
 

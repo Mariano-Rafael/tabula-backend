@@ -58,6 +58,10 @@ class FlowModuleTests {
     @Autowired ObjectMapper json;
     @MockitoBean FlowDocumentStore documents;
     @MockitoBean IbmFlowExportService ibm;
+    @MockitoBean FlowLayoutStore layouts;
+    @Autowired FlowLayoutService layoutService;
+    @Autowired FlowDiagramService diagrams;
+    private final Map<String, com.tabula.tabula_backend.flow.dto.FlowLayoutDtos.Stored> layoutData = new ConcurrentHashMap<>();
     private final Map<String, Snapshot> stored = new ConcurrentHashMap<>();
     private final Map<String, Draft> drafts = new ConcurrentHashMap<>();
     private AccountUser owner, other, admin;
@@ -66,8 +70,18 @@ class FlowModuleTests {
 
     @BeforeEach
     void setup() {
-        cleanup(); stored.clear(); drafts.clear();
+        cleanup(); stored.clear(); drafts.clear(); layoutData.clear();
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+        when(layouts.find(anyString(), anyString())).thenAnswer(call -> Optional.ofNullable(layoutData.get(call.getArgument(1))));
+        when(layouts.save(anyString(), anyString(), nullable(Long.class), anyString(), anyString(), anyString())).thenAnswer(call -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            String id = call.getArgument(1); Long revision = call.getArgument(2);
+            var previous = layoutData.get(id);
+            if (revision == null ? previous != null : previous == null || previous.revision() != revision) throw new FlowException(HttpStatus.PRECONDITION_FAILED, "LAYOUT_REVISION_MISMATCH", "Mismatch");
+            var saved = new com.tabula.tabula_backend.flow.dto.FlowLayoutDtos.Stored(id, call.getArgument(0), revision == null ? 1 : revision + 1,
+                    call.getArgument(3), call.getArgument(4), call.getArgument(5), java.time.Instant.now().toString());
+            layoutData.put(id, saved); return saved;
+        });
         owner = user(false); other = user(false); admin = user(true);
         portfolioId = portfolios.create(actor(owner), new PortfolioDtos.Create("Test", null)).id();
         projectId = portfolios.createProject(actor(owner), portfolioId, new PortfolioDtos.Create("Project", null)).id();
@@ -98,6 +112,92 @@ class FlowModuleTests {
     void cleanup() {
         outbox.deleteAll(); versions.deleteAll(); flows.deleteAll(); targets.deleteAll(); integrationRepository.deleteAll();
         projects.deleteAll(); members.deleteAll(); portfolioRepository.deleteAll(); users.deleteAll();
+    }
+
+    private static final String LAYOUT = "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"node_1\",\"position\":{\"x\":12.5,\"y\":-20},\"collapsed\":false}],\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1}}";
+
+    @Test void diagramsAreReadOnlyScopedAndExposeExactSourceRevisions() throws Exception {
+        var version = upload("diagram-source-key");
+        String url = "/api/v1/flows/" + version.flowId() + "/diagram";
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isNotFound());
+        service.startDraft(actor(owner), version.flowId(), version.id());
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isOk()).andExpect(jsonPath("$.draftRevision").value(1))
+                .andExpect(jsonPath("$.readOnly").value(true)).andExpect(jsonPath("$.sourceChecksum").value(version.checksum()));
+        mvc.perform(get("/api/v1/versions/" + version.id() + "/diagram").with(as(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.versionId").value(version.id()));
+        mvc.perform(get(url).with(as(other))).andExpect(status().isNotFound());
+        portfolios.addMember(actor(owner), portfolioId, new PortfolioDtos.AddMember(UUID.fromString(other.getId()), PortfolioRole.VIEWER));
+        mvc.perform(get(url).with(as(other))).andExpect(status().isOk());
+        assertThat(drafts.get(version.flowId()).revision()).isEqualTo(1);
+        assertThat(service.export(actor(owner), version.id())).isEqualTo(RAW);
+        verifyNoInteractions(ibm);
+    }
+    @Test void diagramDoesNotHideStorageOutagesOrCorruptedDrafts() {
+        var v = upload("diagram-integrity-key"); service.startDraft(actor(owner), v.flowId(), v.id());
+        doThrow(new FlowException(HttpStatus.SERVICE_UNAVAILABLE, "LAYOUT_STORAGE_UNAVAILABLE", "unavailable")).when(layouts).find(anyString(), anyString());
+        assertThatThrownBy(() -> diagrams.draft(actor(owner), v.flowId())).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("LAYOUT_STORAGE_UNAVAILABLE"));
+        var d = drafts.get(v.flowId()); drafts.put(v.flowId(), new Draft(d.flowId(), d.portfolioId(), d.revision(), d.checksum(), "{}"));
+        assertThatThrownBy(() -> diagrams.draft(actor(owner), v.flowId())).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("FLOW_INTEGRITY_ERROR"));
+    }
+
+    @Test void layoutsHaveIndependentEtagsAndNeverChangeIbmJson() throws Exception {
+        var v = upload("layout-independent-key");
+        service.startDraft(actor(owner), v.flowId(), v.id());
+        String url = "/api/v1/flows/" + v.flowId() + "/layout";
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isNotFound());
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-None-Match", "*").contentType("application/json").content(LAYOUT))
+                .andExpect(status().isCreated()).andExpect(header().string("ETag", "\"layout-1\"")).andExpect(jsonPath("$.nodes[0].position.x").value(12.5));
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(LAYOUT.replace("12.5", "99")))
+                .andExpect(status().isOk()).andExpect(header().string("ETag", "\"layout-2\""));
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isOk()).andExpect(jsonPath("$.nodes[0].position.x").value(99));
+        assertThat(service.export(actor(owner), v.id())).isEqualTo(RAW);
+        assertThat(service.draft(actor(owner), v.flowId()).revision()).isEqualTo(1);
+        assertThat(service.draft(actor(owner), v.flowId()).rawJson()).isEqualTo(RAW);
+        verifyNoInteractions(ibm);
+    }
+    @Test void layoutCreationAndUpdatesRequireExplicitPreconditions() throws Exception {
+        String id = upload("layout-preconditions-key").flowId();
+        String url = "/api/v1/flows/" + id + "/layout";
+        mvc.perform(put(url).with(as(owner)).with(csrf()).contentType("application/json").content(LAYOUT)).andExpect(status().isPreconditionRequired());
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"1\"").contentType("application/json").content(LAYOUT)).andExpect(status().isBadRequest());
+        layoutService.save(actor(owner), id, null, "*", LAYOUT);
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-None-Match", "*").contentType("application/json").content(LAYOUT)).andExpect(status().isPreconditionFailed());
+        layoutService.save(actor(owner), id, "\"layout-1\"", null, LAYOUT);
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(LAYOUT)).andExpect(status().isPreconditionFailed());
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-2\"").header("If-None-Match", "*").contentType("application/json").content(LAYOUT)).andExpect(status().isBadRequest());
+    }
+    @Test void layoutPermissionsIncludeScopeCsrfAndArchiveProtection() throws Exception {
+        String id = upload("layout-permissions-key").flowId();
+        layoutService.save(actor(owner), id, null, "*", LAYOUT);
+        String url = "/api/v1/flows/" + id + "/layout";
+        mvc.perform(get(url).with(as(other))).andExpect(status().isNotFound());
+        portfolios.addMember(actor(owner), portfolioId, new PortfolioDtos.AddMember(UUID.fromString(other.getId()), PortfolioRole.VIEWER));
+        mvc.perform(get(url).with(as(other))).andExpect(status().isOk());
+        mvc.perform(put(url).with(as(other)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(LAYOUT)).andExpect(status().isForbidden());
+        mvc.perform(put(url).with(as(owner)).header("If-Match", "\"layout-1\"").contentType("application/json").content(LAYOUT)).andExpect(status().isForbidden());
+        metadata.archive(actor(owner), id);
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isOk());
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(LAYOUT)).andExpect(status().isConflict());
+    }
+    @Test void invalidVisualGroupsAndSemanticPayloadsAreRejected() {
+        String id = upload("layout-validation-key").flowId();
+        for (String raw : List.of(
+                "{\"schemaVersion\":2,\"nodes\":[]}",
+                "{\"schemaVersion\":1,\"nodes\":[],\"edges\":[]}",
+                "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"a\",\"position\":{\"x\":0,\"y\":0},\"parentId\":\"missing\"}]}",
+                "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"a\",\"position\":{\"x\":0,\"y\":0},\"parentId\":\"a\"}]}",
+                "{\"schemaVersion\":1,\"nodes\":[{\"id\":\"a\",\"position\":{\"x\":0,\"y\":0}},{\"id\":\"a\",\"position\":{\"x\":1,\"y\":1}}]}",
+                LAYOUT.replace("12.5", "1e309"), LAYOUT.replace("\"zoom\":1", "\"zoom\":0"), LAYOUT.replace("\"collapsed\":false", "\"width\":-1"))) {
+            assertThatThrownBy(() -> layoutService.save(actor(owner), id, null, "*", raw)).isInstanceOf(FlowException.class);
+        }
+        verify(layouts, never()).save(anyString(), anyString(), any(), anyString(), anyString(), anyString());
+    }
+    @Test void corruptedStoredLayoutIsNotReturned() {
+        String id = upload("layout-integrity-key").flowId();
+        layoutService.save(actor(owner), id, null, "*", LAYOUT);
+        var s = layoutData.get(id);
+        layoutData.put(id, new com.tabula.tabula_backend.flow.dto.FlowLayoutDtos.Stored(id, portfolioId, s.revision(), "{}", s.checksum(), s.updatedBy(), s.updatedAt()));
+        assertThatThrownBy(() -> layoutService.find(actor(owner), id)).isInstanceOfSatisfying(FlowException.class, ex -> assertThat(ex.code()).isEqualTo("LAYOUT_INTEGRITY_ERROR"));
     }
 
     @Test

@@ -18,7 +18,8 @@ public class PortfolioService {
     private final PortfolioMemberRepository members;
     private final ProjectRepository projects;
     private final AccountDirectoryService accounts;
-    private enum Permission { READ, EDIT_PROJECT, MANAGE, OPERATE }
+
+    private enum Permission {READ, EDIT_PROJECT, MANAGE, OPERATE}
 
     public PortfolioService(PortfolioRepository portfolios, PortfolioMemberRepository members,
                             ProjectRepository projects, AccountDirectoryService accounts) {
@@ -80,7 +81,9 @@ public class PortfolioService {
     public MemberView changeRole(AccountPrincipal actor, String id, String userId, ChangeRole input) {
         requireActive(access(actor, id, true, Permission.MANAGE));
         var member = member(id, userId);
-        if (input.role() != PortfolioRole.OWNER) { protectLastOwner(id, member); }
+        if (input.role() != PortfolioRole.OWNER) {
+            protectLastOwner(id, member);
+        }
         member.changeRole(input.role());
         return MemberView.from(member);
     }
@@ -111,13 +114,17 @@ public class PortfolioService {
         return ProjectView.from(project(id));
     }
 
-    /** Cross-module authorization contract; no repository or persistence entity is exposed. */
+    /**
+     * Cross-module authorization contract; no repository or persistence entity is exposed.
+     */
     @Transactional(readOnly = true)
     public void requirePortfolioRead(AccountPrincipal actor, String portfolioId) {
         access(actor, portfolioId, false, Permission.READ);
     }
 
-    /** Joins the caller transaction so archival and membership changes cannot race local writes. */
+    /**
+     * Joins the caller transaction so archival and membership changes cannot race local writes.
+     */
     public void requirePortfolioManagement(AccountPrincipal actor, String portfolioId) {
         requireActive(access(actor, portfolioId, true, Permission.MANAGE));
     }
@@ -125,7 +132,9 @@ public class PortfolioService {
     public ProjectView requireProjectManagement(AccountPrincipal actor, String id) {
         requireActive(access(actor, projectPortfolio(id), true, Permission.MANAGE));
         var project = project(id);
-        if (project.isArchived()) { throw archived(); }
+        if (project.isArchived()) {
+            throw archived();
+        }
         return ProjectView.from(project);
     }
 
@@ -138,7 +147,9 @@ public class PortfolioService {
         var project = project(id);
         if (!allowArchived) {
             requireActive(portfolio);
-            if (project.isArchived()) { throw archived(); }
+            if (project.isArchived()) {
+                throw archived();
+            }
         }
         return ProjectView.from(project);
     }
@@ -148,7 +159,9 @@ public class PortfolioService {
         var project = project(id);
         if (!allowArchived) {
             requireActive(portfolio);
-            if (project.isArchived()) { throw archived(); }
+            if (project.isArchived()) {
+                throw archived();
+            }
         }
         return ProjectView.from(project);
     }
@@ -156,7 +169,9 @@ public class PortfolioService {
     public ProjectView updateProject(AccountPrincipal actor, String id, Update input) {
         requireActive(access(actor, projectPortfolio(id), true, Permission.EDIT_PROJECT));
         var project = project(id);
-        if (project.isArchived()) { throw archived(); }
+        if (project.isArchived()) {
+            throw archived();
+        }
         project.update(input.name() == null ? project.getName() : name(input.name()),
                 input.description() == null ? project.getDescription() : description(input.description()));
         return ProjectView.from(project);
@@ -172,7 +187,9 @@ public class PortfolioService {
     private Portfolio access(AccountPrincipal actor, String id, boolean lock, Permission permission) {
         var portfolio = (lock ? portfolios.findLocked(id) : portfolios.findById(id)).orElseThrow(PortfolioService::notFound);
         var identity = accounts.current(actor);
-        if (identity.admin()) { return portfolio; }
+        if (identity.admin()) {
+            return portfolio;
+        }
         var role = members.findByPortfolioIdAndUserId(id, identity.id()).orElseThrow(PortfolioService::notFound).getRole();
         boolean permitted = switch (permission) {
             case READ -> true;
@@ -180,7 +197,9 @@ public class PortfolioService {
             case EDIT_PROJECT -> role.canEditProjects();
             case OPERATE -> role != PortfolioRole.VIEWER;
         };
-        if (!permitted) { throw error(HttpStatus.FORBIDDEN, "PORTFOLIO_PERMISSION_REQUIRED", "Permissão insuficiente no portfólio."); }
+        if (!permitted) {
+            throw error(HttpStatus.FORBIDDEN, "PORTFOLIO_PERMISSION_REQUIRED", "Permissão insuficiente no portfólio.");
+        }
         return portfolio;
     }
 
@@ -195,25 +214,50 @@ public class PortfolioService {
         }
     }
 
-    private String projectPortfolio(String id) { return projects.findPortfolioId(id).orElseThrow(PortfolioService::notFound); }
-    private Project project(String id) { return projects.findById(id).orElseThrow(PortfolioService::notFound); }
-    private static void requireActive(Portfolio p) { if (p.isArchived()) { throw archived(); } }
-    private static PortfolioException archived() { return error(HttpStatus.CONFLICT, "RESOURCE_ARCHIVED", "Recurso arquivado não permite alterações."); }
-    private static PortfolioException notFound() { return error(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "Recurso não encontrado."); }
-    private static PortfolioException error(HttpStatus status, String code, String message) { return new PortfolioException(status, code, message); }
+    private String projectPortfolio(String id) {
+        return projects.findPortfolioId(id).orElseThrow(PortfolioService::notFound);
+    }
+
+    private Project project(String id) {
+        return projects.findById(id).orElseThrow(PortfolioService::notFound);
+    }
+
+    private static void requireActive(Portfolio p) {
+        if (p.isArchived()) {
+            throw archived();
+        }
+    }
+
+    private static PortfolioException archived() {
+        return error(HttpStatus.CONFLICT, "RESOURCE_ARCHIVED", "Recurso arquivado não permite alterações.");
+    }
+
+    private static PortfolioException notFound() {
+        return error(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "Recurso não encontrado.");
+    }
+
+    private static PortfolioException error(HttpStatus status, String code, String message) {
+        return new PortfolioException(status, code, message);
+    }
 
     private static Pageable paging(int page, int size, String sort) {
-        if (page < 0 || size < 1 || size > 100) { throw error(HttpStatus.BAD_REQUEST, "INVALID_PAGE", "Use page >= 0 e size entre 1 e 100."); }
+        if (page < 0 || size < 1 || size > 100) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_PAGE", "Use page >= 0 e size entre 1 e 100.");
+        }
         return PageRequest.of(page, size, Sort.by(sort));
     }
+
     private static String name(String value) {
         if (value == null || value.isBlank() || value.strip().length() > 120) {
             throw error(HttpStatus.BAD_REQUEST, "INVALID_NAME", "Nome obrigatório com até 120 caracteres.");
         }
         return value.strip();
     }
+
     private static String description(String value) {
-        if (value != null && value.length() > 1000) { throw error(HttpStatus.BAD_REQUEST, "INVALID_DESCRIPTION", "Descrição deve ter até 1000 caracteres."); }
+        if (value != null && value.length() > 1000) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_DESCRIPTION", "Descrição deve ter até 1000 caracteres.");
+        }
         return value == null ? "" : value.strip();
     }
 }

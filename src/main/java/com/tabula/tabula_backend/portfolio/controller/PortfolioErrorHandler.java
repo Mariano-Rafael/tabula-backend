@@ -12,14 +12,27 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice(basePackageClasses = PortfolioController.class)
 public class PortfolioErrorHandler {
     @ExceptionHandler(PortfolioException.class)
-    public ProblemDetail portfolio(PortfolioException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
+    public ProblemDetail portfolio(PortfolioException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler(IdentityException.class)
-    public ProblemDetail identity(IdentityException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
+    public ProblemDetail identity(IdentityException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
+    @ExceptionHandler({
+            MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class})
-    public ProblemDetail invalid(Exception ex) { return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Revise os campos enviados."); }
+    public ProblemDetail invalid(Exception ex) {
+        return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Revise os campos enviados.");
+    }
+
     @ExceptionHandler({DataIntegrityViolationException.class, ConcurrencyFailureException.class})
-    public ProblemDetail conflict(Exception ex) { return problem(HttpStatus.CONFLICT, "RESOURCE_CONFLICT", "Operação em conflito. Atualize os dados e tente novamente."); }
+    public ProblemDetail conflict(Exception ex) {
+        return problem(HttpStatus.CONFLICT, "RESOURCE_CONFLICT", "Operação em conflito. Atualize os dados e tente novamente.");
+    }
+
     private static ProblemDetail problem(HttpStatus status, String code, String message) {
         var detail = ProblemDetail.forStatusAndDetail(status, message);
         detail.setProperty("code", code);

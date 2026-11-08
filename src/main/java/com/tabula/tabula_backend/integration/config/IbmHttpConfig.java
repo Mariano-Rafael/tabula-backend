@@ -2,6 +2,7 @@ package com.tabula.tabula_backend.integration.config;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+
 import org.springframework.context.annotation.*;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;

@@ -1,0 +1,51 @@
+meta {
+  name: 14-Criar-layout
+  type: http
+  seq: 45
+}
+
+put {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/layout
+  body: json
+  auth: none
+}
+
+headers {
+  If-None-Match: *
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "node_1",
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "collapsed": false
+      }
+    ],
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}
+
+script:post-response {
+  if (res.getStatus() < 300) bru.setVar("layoutEtag", res.getHeader("etag"));
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([201]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Cria somente metadados visuais. Substitua node_1 pelo ID visual escolhido. Nao altera o JSON IBM nem cria elementos de dialogo. 412 se layout ja existir: consulte e use If-Match.
+}

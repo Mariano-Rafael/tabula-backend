@@ -14,20 +14,43 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice(basePackages = {"com.tabula.tabula_backend.conversation.controller", "com.tabula.tabula_backend.history.controller"})
 public class ConversationErrorHandler {
     @ExceptionHandler(ConversationException.class)
-    public ProblemDetail conversation(ConversationException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
+    public ProblemDetail conversation(ConversationException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler(IdentityException.class)
-    public ProblemDetail identity(IdentityException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
+    public ProblemDetail identity(IdentityException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler(PortfolioException.class)
-    public ProblemDetail portfolio(PortfolioException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
+    public ProblemDetail portfolio(PortfolioException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler(IntegrationException.class)
-    public ProblemDetail integration(IntegrationException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
+    public ProblemDetail integration(IntegrationException ex) {
+        return problem(ex.status(), ex.code(), ex.getMessage());
+    }
+
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
-    public ProblemDetail invalid(Exception ex) { return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Revise os campos enviados."); }
+    public ProblemDetail invalid(Exception ex) {
+        return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Revise os campos enviados.");
+    }
+
     @ExceptionHandler({DataIntegrityViolationException.class, ConcurrencyFailureException.class})
-    public ProblemDetail conflict(Exception ex) { return problem(HttpStatus.CONFLICT, "CONVERSATION_CONFLICT", "Operação concorrente. Consulte o atendimento com a mesma chave."); }
+    public ProblemDetail conflict(Exception ex) {
+        return problem(HttpStatus.CONFLICT, "CONVERSATION_CONFLICT", "Operação concorrente. Consulte o atendimento com a mesma chave.");
+    }
+
     @ExceptionHandler(DataAccessException.class)
-    public ProblemDetail database(DataAccessException ex) { return problem(HttpStatus.SERVICE_UNAVAILABLE, "CONVERSATION_METADATA_UNAVAILABLE", "Metadados indisponíveis. Consulte ou reconcilie a tentativa antes de reenviar."); }
+    public ProblemDetail database(DataAccessException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "CONVERSATION_METADATA_UNAVAILABLE", "Metadados indisponíveis. Consulte ou reconcilie a tentativa antes de reenviar.");
+    }
+
     private static ProblemDetail problem(HttpStatus status, String code, String detail) {
-        var result = ProblemDetail.forStatusAndDetail(status, detail); result.setProperty("code", code); return result;
+        var result = ProblemDetail.forStatusAndDetail(status, detail);
+        result.setProperty("code", code);
+        return result;
     }
 }

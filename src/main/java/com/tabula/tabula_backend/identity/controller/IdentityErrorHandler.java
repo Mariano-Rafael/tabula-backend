@@ -15,7 +15,8 @@ public class IdentityErrorHandler {
         return problem(ex.status(), ex.code(), ex.getMessage());
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
+    @ExceptionHandler({
+            MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class})
     public ProblemDetail invalid(Exception ex) {
         // Do not include rejected values (especially passwords) or binding exception messages.

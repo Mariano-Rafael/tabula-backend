@@ -2,10 +2,12 @@ package com.tabula.tabula_backend.integration.client;
 
 import com.tabula.tabula_backend.integration.config.IbmSettings;
 import com.tabula.tabula_backend.integration.service.IntegrationException;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
@@ -20,8 +22,11 @@ public class IbmHttpTransport {
     private final RestClient http;
     private final ObjectMapper json;
     private final IbmSettings settings;
+
     public IbmHttpTransport(@Qualifier("ibmRestClient") RestClient http, ObjectMapper json, IbmSettings settings) {
-        this.http = http; this.json = json; this.settings = settings;
+        this.http = http;
+        this.json = json;
+        this.settings = settings;
     }
 
     public Map<String, Object> authenticate() {
@@ -38,7 +43,9 @@ public class IbmHttpTransport {
 
     public Map<String, Object> get(String path, String version, String token, boolean probeList) {
         var uri = UriComponentsBuilder.fromUri(IbmEndpointPolicy.base(settings.serviceUrl())).path(path).queryParam("version", version);
-        if (probeList) { uri.queryParam("page_limit", 1); }
+        if (probeList) {
+            uri.queryParam("page_limit", 1);
+        }
         return exchange(http.get().uri(uri.build().encode().toUri()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
     }
 
@@ -75,28 +82,45 @@ public class IbmHttpTransport {
             return request.accept(MediaType.APPLICATION_JSON).exchange((req, response) -> {
                 int status = response.getStatusCode().value();
                 byte[] body = response.getBody().readNBytes(maxBytes + 1);
-                if (status < 200 || status >= 300) { throw upstream(status, body); }
-                if (body.length > maxBytes) { throw failure("IBM_RESPONSE_TOO_LARGE"); }
-                if (allowEmpty && body.length == 0) { return Map.of(); }
+                if (status < 200 || status >= 300) {
+                    throw upstream(status, body);
+                }
+                if (body.length > maxBytes) {
+                    throw failure("IBM_RESPONSE_TOO_LARGE");
+                }
+                if (allowEmpty && body.length == 0) {
+                    return Map.of();
+                }
                 try {
                     Object parsed = json.readerFor(Object.class).with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS,
                             DeserializationFeature.USE_BIG_INTEGER_FOR_INTS).readValue(body);
-                    if (!(parsed instanceof Map<?, ?>)) { throw failure("IBM_INVALID_RESPONSE"); }
+                    if (!(parsed instanceof Map<?, ?>)) {
+                        throw failure("IBM_INVALID_RESPONSE");
+                    }
                     return (Map<String, Object>) parsed;
-                } catch (IntegrationException ex) { throw ex; }
-                catch (RuntimeException ex) { throw failure("IBM_INVALID_RESPONSE"); }
+                } catch (IntegrationException ex) {
+                    throw ex;
+                } catch (RuntimeException ex) {
+                    throw failure("IBM_INVALID_RESPONSE");
+                }
             });
-        } catch (IntegrationException ex) { throw ex; }
-        catch (ResourceAccessException ex) {
+        } catch (IntegrationException ex) {
+            throw ex;
+        } catch (ResourceAccessException ex) {
             Throwable cause = ex.getCause();
             if (cause instanceof java.net.http.HttpTimeoutException || cause instanceof java.net.SocketTimeoutException) {
                 throw new IntegrationException(HttpStatus.GATEWAY_TIMEOUT, "IBM_TIMEOUT", "Tempo limite ao consultar a IBM.");
             }
             throw new IntegrationException(HttpStatus.SERVICE_UNAVAILABLE, "IBM_UNAVAILABLE", "Não foi possível conectar à IBM.");
-        } catch (RestClientException ex) { throw failure("IBM_INVALID_RESPONSE"); }
+        } catch (RestClientException ex) {
+            throw failure("IBM_INVALID_RESPONSE");
+        }
     }
 
-    private static IntegrationException failure(String code) { return new IntegrationException(HttpStatus.BAD_GATEWAY, code, "Resposta IBM inválida ou acima do limite permitido."); }
+    private static IntegrationException failure(String code) {
+        return new IntegrationException(HttpStatus.BAD_GATEWAY, code, "Resposta IBM inválida ou acima do limite permitido.");
+    }
+
     private IntegrationException upstream(int status, byte[] body) {
         // Recognize a verified service limitation without forwarding arbitrary upstream messages.
         if (status == 400 && body.length <= MAX_BYTES) {

@@ -7,9 +7,11 @@ import com.tabula.tabula_backend.integration.model.*;
 import com.tabula.tabula_backend.integration.repository.*;
 import com.tabula.tabula_backend.portfolio.dto.PortfolioDtos.PageView;
 import com.tabula.tabula_backend.portfolio.service.PortfolioService;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,21 +24,58 @@ public class IntegrationService {
     private final IbmTargetRepository targets;
     private final PortfolioService portfolios;
     private final AccountDirectoryService accounts;
+    private final IbmCredentialCipher cipher;
+    private final com.tabula.tabula_backend.integration.client.IbmClientFactory clientFactory;
 
     public IntegrationService(IbmIntegrationRepository integrations, IbmTargetRepository targets,
-                              PortfolioService portfolios, AccountDirectoryService accounts) {
-        this.integrations = integrations; this.targets = targets; this.portfolios = portfolios; this.accounts = accounts;
+                              PortfolioService portfolios, AccountDirectoryService accounts, IbmCredentialCipher cipher,
+                              com.tabula.tabula_backend.integration.client.IbmClientFactory clientFactory) {
+        this.integrations = integrations;
+        this.targets = targets;
+        this.portfolios = portfolios;
+        this.accounts = accounts;
+        this.cipher = cipher;
+        this.clientFactory = clientFactory;
     }
 
     public IntegrationView create(AccountPrincipal actor, String portfolioId, CreateIntegration input) {
-        if (!accounts.current(actor).admin()) {
+        boolean custom = input.serviceUrl() != null || input.apiKey() != null;
+        if (!custom && !accounts.current(actor).admin()) {
             throw error(HttpStatus.FORBIDDEN, "GLOBAL_ADMIN_REQUIRED", "Somente o administrador global pode vincular a credencial configurada.");
         }
         portfolios.requirePortfolioManagement(actor, portfolioId);
         if (integrations.findByPortfolioId(portfolioId).isPresent()) {
             throw error(HttpStatus.CONFLICT, "INTEGRATION_ALREADY_EXISTS", "Já existe uma integração configurada neste portfólio.");
         }
-        return IntegrationView.from(integrations.save(new IbmIntegration(portfolioId, name(input.name()))));
+        var integration = new IbmIntegration(portfolioId, name(input.name()));
+        if (custom) {
+            if (input.serviceUrl() == null || input.apiKey() == null) throw error(HttpStatus.BAD_REQUEST, "IBM_CONNECTION_FIELDS_REQUIRED", "Informe serviceUrl e apiKey juntos.");
+            String endpoint;
+            try { endpoint = com.tabula.tabula_backend.integration.client.IbmEndpointPolicy.base(input.serviceUrl()).toString(); }
+            catch (IntegrationException ex) { throw error(HttpStatus.BAD_REQUEST, "INVALID_IBM_SERVICE_URL", "Informe um endpoint público HTTPS da IBM Cloud."); }
+            integration.configureConnection(endpoint, null);
+            integration.configureConnection(endpoint, cipher.encrypt(apiKey(input.apiKey()), integration.credentialContext()));
+        }
+        return IntegrationView.from(integrations.save(integration));
+    }
+    public IntegrationView rotateCredential(AccountPrincipal actor, String id, RotateCredential input) {
+        var integration = integration(id);
+        portfolios.requirePortfolioManagement(actor, integration.getPortfolioId());
+        if (!"DATABASE".equals(integration.getCredentialSource())) throw error(HttpStatus.CONFLICT, "IBM_LEGACY_CREDENTIAL", "A credencial compartilhada é administrada no servidor.");
+        integration.rotateCredential(cipher.encrypt(apiKey(input.apiKey()), integration.credentialContext()));
+        return IntegrationView.from(integration);
+    }
+    /** Internal use after caller authorization. Reference contains no credential. */
+    @Transactional(readOnly = true)
+    public com.tabula.tabula_backend.integration.client.IbmConnectionRef connectionReference(String integrationId) { return clientFactory.reference(integrationId); }
+    private String apiKey(String value) {
+        if (value == null || !value.matches("[\\x21-\\x7e]{1,2048}")) throw error(HttpStatus.BAD_REQUEST, "INVALID_IBM_API_KEY", "Informe uma API key válida sem espaços ou caracteres de controle.");
+        return value;
+    }
+    public TargetConfig defaults(AccountPrincipal actor, String id, EnvironmentType type, com.tabula.tabula_backend.integration.config.IbmSettings settings) {
+        var i = integrationForProbe(actor, id);
+        if ("PROPERTIES".equals(i.credentialSource())) return settings.targetDefaults(type);
+        return new TargetConfig("IBM " + type.name(), type, null, null, null, null, null, settings.v1Version(), settings.v2Version());
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +116,9 @@ public class IntegrationService {
     @Transactional(readOnly = true)
     public PageView<TargetView> targets(AccountPrincipal actor, String projectId, int page, int size) {
         portfolios.project(actor, projectId);
-        if (page < 0 || size < 1 || size > 100) { throw error(HttpStatus.BAD_REQUEST, "INVALID_PAGE", "Use page >= 0 e size entre 1 e 100."); }
+        if (page < 0 || size < 1 || size > 100) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_PAGE", "Use page >= 0 e size entre 1 e 100.");
+        }
         return PageView.from(targets.findByProjectId(projectId, PageRequest.of(page, size, Sort.by("id"))).map(TargetView::from));
     }
 
@@ -113,7 +154,9 @@ public class IntegrationService {
         var target = target(id);
         portfolios.requireProjectManagement(actor, target.getProjectId());
         requireActive(integration(target.getIntegrationId()));
-        if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
+        if (!target.isActive()) {
+            throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado.");
+        }
         return TargetView.from(target);
     }
 
@@ -134,7 +177,9 @@ public class IntegrationService {
         var target = target(id);
         portfolios.requireProjectEditing(actor, target.getProjectId());
         requireActive(integration(target.getIntegrationId()));
-        if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
+        if (!target.isActive()) {
+            throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado.");
+        }
         return TargetView.from(target);
     }
 
@@ -142,15 +187,26 @@ public class IntegrationService {
         var target = target(id);
         portfolios.requireProjectOperation(actor, target.getProjectId(), false);
         requireActive(integration(target.getIntegrationId()));
-        if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
+        if (!target.isActive()) {
+            throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado.");
+        }
         return TargetView.from(target);
     }
 
-    private IbmIntegration integration(String id) { return integrations.findById(id).orElseThrow(IntegrationService::notFound); }
-    private IbmTarget target(String id) { return targets.findById(id).orElseThrow(IntegrationService::notFound); }
-    private static void requireActive(IbmIntegration i) {
-        if (!i.isActive()) { throw error(HttpStatus.CONFLICT, "INTEGRATION_DISABLED", "Integração desativada."); }
+    private IbmIntegration integration(String id) {
+        return integrations.findById(id).orElseThrow(IntegrationService::notFound);
     }
+
+    private IbmTarget target(String id) {
+        return targets.findById(id).orElseThrow(IntegrationService::notFound);
+    }
+
+    private static void requireActive(IbmIntegration i) {
+        if (!i.isActive()) {
+            throw error(HttpStatus.CONFLICT, "INTEGRATION_DISABLED", "Integração desativada.");
+        }
+    }
+
     private static void configure(IbmTarget target, TargetConfig c, boolean active) {
         String assistant = identifier(c.assistantId());
         String environment = identifier(c.environmentId());
@@ -163,26 +219,47 @@ public class IntegrationService {
         if ((environment != null || dialog != null || action != null) && assistant == null) {
             throw error(HttpStatus.BAD_REQUEST, "ASSISTANT_REQUIRED", "Assistant obrigatório para ambientes e skills.");
         }
-        if (c.environmentType() == null) { throw error(HttpStatus.BAD_REQUEST, "ENVIRONMENT_TYPE_REQUIRED", "Tipo do ambiente obrigatório."); }
+        if (c.environmentType() == null) {
+            throw error(HttpStatus.BAD_REQUEST, "ENVIRONMENT_TYPE_REQUIRED", "Tipo do ambiente obrigatório.");
+        }
         target.configure(name(c.name()), c.environmentType().name(), assistant, environment, workspace, dialog, action,
                 version(c.v1Version()), version(c.v2Version()), active);
     }
+
     private static String identifier(String value) {
-        if (value == null || value.isBlank()) { return null; }
-        if (!value.matches("[A-Za-z0-9_-]{1,128}")) { throw error(HttpStatus.BAD_REQUEST, "INVALID_IBM_IDENTIFIER", "Identificador IBM inválido."); }
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        if (!value.matches("[A-Za-z0-9_-]{1,128}")) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_IBM_IDENTIFIER", "Identificador IBM inválido.");
+        }
         return value;
     }
+
     private static String version(String value) {
         try {
-            if (value == null || !value.matches("\\d{4}-\\d{2}-\\d{2}")) { throw new DateTimeParseException("Invalid", "", 0); }
+            if (value == null || !value.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                throw new DateTimeParseException("Invalid", "", 0);
+            }
             LocalDate.parse(value);
             return value;
-        } catch (DateTimeParseException ex) { throw error(HttpStatus.BAD_REQUEST, "INVALID_API_VERSION", "Versão da API deve ser uma data válida YYYY-MM-DD."); }
+        } catch (DateTimeParseException ex) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_API_VERSION", "Versão da API deve ser uma data válida YYYY-MM-DD.");
+        }
     }
+
     private static String name(String value) {
-        if (value == null || value.isBlank() || value.length() > 120) { throw error(HttpStatus.BAD_REQUEST, "INVALID_NAME", "Nome obrigatório com até 120 caracteres."); }
+        if (value == null || value.isBlank() || value.length() > 120) {
+            throw error(HttpStatus.BAD_REQUEST, "INVALID_NAME", "Nome obrigatório com até 120 caracteres.");
+        }
         return value.strip();
     }
-    private static IntegrationException notFound() { return error(HttpStatus.NOT_FOUND, "INTEGRATION_RESOURCE_NOT_FOUND", "Recurso não encontrado."); }
-    private static IntegrationException error(HttpStatus status, String code, String message) { return new IntegrationException(status, code, message); }
+
+    private static IntegrationException notFound() {
+        return error(HttpStatus.NOT_FOUND, "INTEGRATION_RESOURCE_NOT_FOUND", "Recurso não encontrado.");
+    }
+
+    private static IntegrationException error(HttpStatus status, String code, String message) {
+        return new IntegrationException(status, code, message);
+    }
 }

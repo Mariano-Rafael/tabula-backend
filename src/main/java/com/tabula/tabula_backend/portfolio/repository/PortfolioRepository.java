@@ -2,7 +2,9 @@ package com.tabula.tabula_backend.portfolio.repository;
 
 import com.tabula.tabula_backend.portfolio.model.Portfolio;
 import jakarta.persistence.LockModeType;
+
 import java.util.Optional;
+
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 
