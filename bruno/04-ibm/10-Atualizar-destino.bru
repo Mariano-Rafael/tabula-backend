@@ -1,0 +1,29 @@
+meta {
+  name: 10-Atualizar-destino
+  type: http
+  seq: 25
+}
+
+put {
+  url: {{baseUrl}}/api/v1/targets/{{targetId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {{targetConfiguration}}
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

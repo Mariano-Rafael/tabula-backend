@@ -1,0 +1,32 @@
+meta {
+  name: 05-Alterar-minha-senha
+  type: http
+  seq: 55
+}
+
+put {
+  url: {{baseUrl}}/api/v1/account/password
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "currentPassword": "{{password}}",
+    "newPassword": "{{newPassword}}"
+  }
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([204]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Altera a senha do usuario autenticado e invalida sessoes. Execute somente por escolha explicita.
+}

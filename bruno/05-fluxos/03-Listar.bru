@@ -1,0 +1,21 @@
+meta {
+  name: 03-Listar
+  type: http
+  seq: 31
+}
+
+get {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}/flows?page=0&size=20&includeArchived=false
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

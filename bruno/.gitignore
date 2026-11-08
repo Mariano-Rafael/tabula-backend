@@ -1,0 +1,4 @@
+environments/*
+!environments/Local.example.bru
+.env
+results/

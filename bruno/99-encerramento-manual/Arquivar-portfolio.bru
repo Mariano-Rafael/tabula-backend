@@ -1,0 +1,21 @@
+meta {
+  name: Arquivar-portfolio
+  type: http
+  seq: 61
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/portfolios/{{portfolioId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([204]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

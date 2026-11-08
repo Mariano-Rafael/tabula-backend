@@ -1,0 +1,21 @@
+meta {
+  name: Desativar-integracao
+  type: http
+  seq: 59
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/integrations/{{integrationId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([204]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

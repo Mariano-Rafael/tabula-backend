@@ -1,0 +1,21 @@
+meta {
+  name: 09-Encerrar
+  type: http
+  seq: 50
+}
+
+post {
+  url: {{baseUrl}}/api/v1/conversations/{{conversationId}}/close
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200,202]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

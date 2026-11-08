@@ -1,0 +1,32 @@
+meta {
+  name: 06-Adicionar-membro
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/portfolios/{{portfolioId}}/members
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "userId": "{{userId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([201]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

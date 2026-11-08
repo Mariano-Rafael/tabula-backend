@@ -1,0 +1,21 @@
+meta {
+  name: 06-Consultar-turno
+  type: http
+  seq: 47
+}
+
+get {
+  url: {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages/{{turnId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

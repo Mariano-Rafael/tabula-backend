@@ -1,0 +1,21 @@
+meta {
+  name: Logout
+  type: http
+  seq: 62
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/logout
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([204]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}
