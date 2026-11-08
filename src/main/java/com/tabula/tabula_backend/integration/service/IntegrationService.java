@@ -124,13 +124,21 @@ public class IntegrationService {
                 new Capability("READ_ENVIRONMENT", true, t.environmentId() != null, "NOT_VERIFIED"),
                 new Capability("READ_DIALOG_SKILL", true, t.dialogSkillId() != null, "NOT_VERIFIED"),
                 new Capability("READ_ACTION_SKILL", true, t.actionSkillId() != null, "NOT_VERIFIED"),
-                new Capability("SEND_MESSAGE", false, false, "NOT_IMPLEMENTED"),
+                new Capability("SEND_MESSAGE", true, t.dialogWorkspaceId() != null || (t.assistantId() != null && t.environmentId() != null), "NOT_VERIFIED"),
                 new Capability("WRITE_FLOW", false, false, "NOT_IMPLEMENTED"));
     }
 
     public TargetView targetForExport(AccountPrincipal actor, String id) {
         var target = target(id);
         portfolios.requireProjectEditing(actor, target.getProjectId());
+        requireActive(integration(target.getIntegrationId()));
+        if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
+        return TargetView.from(target);
+    }
+
+    public TargetView targetForConversation(AccountPrincipal actor, String id) {
+        var target = target(id);
+        portfolios.requireProjectOperation(actor, target.getProjectId(), false);
         requireActive(integration(target.getIntegrationId()));
         if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
         return TargetView.from(target);

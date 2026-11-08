@@ -18,7 +18,7 @@ public class PortfolioService {
     private final PortfolioMemberRepository members;
     private final ProjectRepository projects;
     private final AccountDirectoryService accounts;
-    private enum Permission { READ, EDIT_PROJECT, MANAGE }
+    private enum Permission { READ, EDIT_PROJECT, MANAGE, OPERATE }
 
     public PortfolioService(PortfolioRepository portfolios, PortfolioMemberRepository members,
                             ProjectRepository projects, AccountDirectoryService accounts) {
@@ -136,6 +136,16 @@ public class PortfolioService {
         return ProjectView.from(project);
     }
 
+    public ProjectView requireProjectOperation(AccountPrincipal actor, String id, boolean allowArchived) {
+        var portfolio = access(actor, projectPortfolio(id), true, Permission.OPERATE);
+        var project = project(id);
+        if (!allowArchived) {
+            requireActive(portfolio);
+            if (project.isArchived()) { throw archived(); }
+        }
+        return ProjectView.from(project);
+    }
+
     public ProjectView updateProject(AccountPrincipal actor, String id, Update input) {
         requireActive(access(actor, projectPortfolio(id), true, Permission.EDIT_PROJECT));
         var project = project(id);
@@ -161,6 +171,7 @@ public class PortfolioService {
             case READ -> true;
             case MANAGE -> role == PortfolioRole.OWNER;
             case EDIT_PROJECT -> role.canEditProjects();
+            case OPERATE -> role != PortfolioRole.VIEWER;
         };
         if (!permitted) { throw error(HttpStatus.FORBIDDEN, "PORTFOLIO_PERMISSION_REQUIRED", "Permissão insuficiente no portfólio."); }
         return portfolio;

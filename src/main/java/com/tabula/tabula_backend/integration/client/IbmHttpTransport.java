@@ -48,6 +48,17 @@ public class IbmHttpTransport {
         return exchange(http.get().uri(uri.build().encode().toUri()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token), 8 * MAX_BYTES);
     }
 
+    public Map<String, Object> post(String path, String version, String token, Map<String, Object> body) {
+        var uri = UriComponentsBuilder.fromUri(IbmEndpointPolicy.base(settings.serviceUrl())).path(path).queryParam("version", version).build().encode().toUri();
+        return exchange(http.post().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).body(json.writeValueAsString(body)));
+    }
+
+    public void delete(String path, String version, String token) {
+        var uri = UriComponentsBuilder.fromUri(IbmEndpointPolicy.base(settings.serviceUrl())).path(path).queryParam("version", version).build().encode().toUri();
+        exchange(http.delete().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + token), MAX_BYTES, true);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> exchange(RestClient.RequestHeadersSpec<?> request) {
         return exchange(request, MAX_BYTES);
@@ -55,12 +66,18 @@ public class IbmHttpTransport {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> exchange(RestClient.RequestHeadersSpec<?> request, int maxBytes) {
+        return exchange(request, maxBytes, false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> exchange(RestClient.RequestHeadersSpec<?> request, int maxBytes, boolean allowEmpty) {
         try {
             return request.accept(MediaType.APPLICATION_JSON).exchange((req, response) -> {
                 int status = response.getStatusCode().value();
                 byte[] body = response.getBody().readNBytes(maxBytes + 1);
                 if (status < 200 || status >= 300) { throw upstream(status, body); }
                 if (body.length > maxBytes) { throw failure("IBM_RESPONSE_TOO_LARGE"); }
+                if (allowEmpty && body.length == 0) { return Map.of(); }
                 try {
                     Object parsed = json.readerFor(Object.class).with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS,
                             DeserializationFeature.USE_BIG_INTEGER_FOR_INTS).readValue(body);
