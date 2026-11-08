@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.*;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.DeserializationFeature;
 
 @Component
 public class IbmHttpTransport {
@@ -41,16 +42,28 @@ public class IbmHttpTransport {
         return exchange(http.get().uri(uri.build().encode().toUri()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
     }
 
+    public Map<String, Object> getExport(String path, String version, String token, Map<String, String> query) {
+        var uri = UriComponentsBuilder.fromUri(IbmEndpointPolicy.base(settings.serviceUrl())).path(path).queryParam("version", version);
+        query.forEach(uri::queryParam);
+        return exchange(http.get().uri(uri.build().encode().toUri()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token), 8 * MAX_BYTES);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> exchange(RestClient.RequestHeadersSpec<?> request) {
+        return exchange(request, MAX_BYTES);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> exchange(RestClient.RequestHeadersSpec<?> request, int maxBytes) {
         try {
             return request.accept(MediaType.APPLICATION_JSON).exchange((req, response) -> {
                 int status = response.getStatusCode().value();
-                byte[] body = response.getBody().readNBytes(MAX_BYTES + 1);
+                byte[] body = response.getBody().readNBytes(maxBytes + 1);
                 if (status < 200 || status >= 300) { throw upstream(status, body); }
-                if (body.length > MAX_BYTES) { throw failure("IBM_RESPONSE_TOO_LARGE"); }
+                if (body.length > maxBytes) { throw failure("IBM_RESPONSE_TOO_LARGE"); }
                 try {
-                    Object parsed = json.readValue(body, Object.class);
+                    Object parsed = json.readerFor(Object.class).with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS,
+                            DeserializationFeature.USE_BIG_INTEGER_FOR_INTS).readValue(body);
                     if (!(parsed instanceof Map<?, ?>)) { throw failure("IBM_INVALID_RESPONSE"); }
                     return (Map<String, Object>) parsed;
                 } catch (IntegrationException ex) { throw ex; }

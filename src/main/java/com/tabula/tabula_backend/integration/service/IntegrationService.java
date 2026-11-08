@@ -128,6 +128,14 @@ public class IntegrationService {
                 new Capability("WRITE_FLOW", false, false, "NOT_IMPLEMENTED"));
     }
 
+    public TargetView targetForExport(AccountPrincipal actor, String id) {
+        var target = target(id);
+        portfolios.requireProjectEditing(actor, target.getProjectId());
+        requireActive(integration(target.getIntegrationId()));
+        if (!target.isActive()) { throw error(HttpStatus.CONFLICT, "TARGET_DISABLED", "Destino desativado."); }
+        return TargetView.from(target);
+    }
+
     private IbmIntegration integration(String id) { return integrations.findById(id).orElseThrow(IntegrationService::notFound); }
     private IbmTarget target(String id) { return targets.findById(id).orElseThrow(IntegrationService::notFound); }
     private static void requireActive(IbmIntegration i) {

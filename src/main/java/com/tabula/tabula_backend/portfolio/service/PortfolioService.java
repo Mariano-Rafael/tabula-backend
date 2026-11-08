@@ -129,6 +129,13 @@ public class PortfolioService {
         return ProjectView.from(project);
     }
 
+    public ProjectView requireProjectEditing(AccountPrincipal actor, String id) {
+        requireActive(access(actor, projectPortfolio(id), true, Permission.EDIT_PROJECT));
+        var project = project(id);
+        if (project.isArchived()) { throw archived(); }
+        return ProjectView.from(project);
+    }
+
     public ProjectView updateProject(AccountPrincipal actor, String id, Update input) {
         requireActive(access(actor, projectPortfolio(id), true, Permission.EDIT_PROJECT));
         var project = project(id);

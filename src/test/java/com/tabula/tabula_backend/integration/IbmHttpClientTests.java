@@ -119,6 +119,17 @@ class IbmHttpClientTests {
     }
 
     @Test
+    void exportSupportsLargerPayloadsAndPreservesDecimalPrecision() {
+        String body = "{\"decimal\":1234567890.1234567890123456789,\"unknown\":\"" + "x".repeat(1024 * 1024) + "\"}";
+        server.expect(requestTo(BASE + "/v1/workspaces/workspace?version=2021-11-27&export=true"))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        var result = http.getExport("/v1/workspaces/workspace", "2021-11-27", "fake-token", java.util.Map.of("export", "true"));
+        assertThat(result.get("decimal")).isEqualTo(new java.math.BigDecimal("1234567890.1234567890123456789"));
+        assertThat(((String) result.get("unknown")).length()).isEqualTo(1024 * 1024);
+        server.verify();
+    }
+
+    @Test
     void timeoutsAndInvalidTokensHaveStableErrors() {
         server.expect(requestTo(BASE + "/v1/workspaces?version=2021-11-27&page_limit=1"))
                 .andRespond(request -> { throw new java.net.SocketTimeoutException("sensitive detail"); });
