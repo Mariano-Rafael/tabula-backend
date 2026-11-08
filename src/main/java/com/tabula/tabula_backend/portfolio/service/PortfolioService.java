@@ -111,6 +111,24 @@ public class PortfolioService {
         return ProjectView.from(project(id));
     }
 
+    /** Cross-module authorization contract; no repository or persistence entity is exposed. */
+    @Transactional(readOnly = true)
+    public void requirePortfolioRead(AccountPrincipal actor, String portfolioId) {
+        access(actor, portfolioId, false, Permission.READ);
+    }
+
+    /** Joins the caller transaction so archival and membership changes cannot race local writes. */
+    public void requirePortfolioManagement(AccountPrincipal actor, String portfolioId) {
+        requireActive(access(actor, portfolioId, true, Permission.MANAGE));
+    }
+
+    public ProjectView requireProjectManagement(AccountPrincipal actor, String id) {
+        requireActive(access(actor, projectPortfolio(id), true, Permission.MANAGE));
+        var project = project(id);
+        if (project.isArchived()) { throw archived(); }
+        return ProjectView.from(project);
+    }
+
     public ProjectView updateProject(AccountPrincipal actor, String id, Update input) {
         requireActive(access(actor, projectPortfolio(id), true, Permission.EDIT_PROJECT));
         var project = project(id);
