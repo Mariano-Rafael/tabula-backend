@@ -25,21 +25,7 @@ public class IbmFlowExportService {
                 if (!"DRAFT".equals(c.environmentType().name())) {
                     throw error(HttpStatus.CONFLICT, "IBM_DRAFT_REQUIRED", "A exportação de skills usa o rascunho do assistant; selecione um destino DRAFT.");
                 }
-                var result = http.getExport("/v2/assistants/" + IbmEndpointPolicy.identifier(c.assistantId()) + "/skills_export",
-                        c.v2Version(), tokens.token(), Map.of());
-                if ("Failed".equals(result.get("status"))) { throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_FAILED", "A exportação IBM falhou."); }
-                if (!(result.get("assistant_skills") instanceof List<?> skills)) {
-                    if ("Processing".equals(result.get("status")) || "Pending".equals(result.get("status"))) {
-                        throw error(HttpStatus.ACCEPTED, "IBM_EXPORT_PENDING", "Exportação em processamento. Repita a requisição após alguns segundos.");
-                    }
-                    throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_INVALID", "A IBM não retornou as skills exportadas.");
-                }
-                String expectedType = "DIALOG".equals(type) ? "dialog" : "action";
-                var matches = skills.stream().filter(Map.class::isInstance).map(Map.class::cast)
-                        .filter(s -> skillId.equals(s.get("skill_id")) && expectedType.equals(s.get("type"))).toList();
-                if (matches.size() != 1) { throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_SKILL_MISMATCH", "A exportação não contém exatamente a skill configurada."); }
-                @SuppressWarnings("unchecked") Map<String, Object> selected = matches.getFirst();
-                return selected;
+                return exportSkill(c.assistantId(), skillId, c.v2Version(), type);
             }
             if ("DIALOG".equals(type) && c.dialogWorkspaceId() != null) {
                 var workspace = http.getExport("/v1/workspaces/" + IbmEndpointPolicy.identifier(c.dialogWorkspaceId()),
@@ -50,6 +36,29 @@ public class IbmFlowExportService {
             throw error(HttpStatus.BAD_REQUEST, "IBM_FLOW_NOT_CONFIGURED", "Configure a skill correspondente ou um workspace de Dialogs.");
         } catch (IntegrationException ex) {
             if ("IBM_AUTHENTICATION_FAILED".equals(ex.code())) { tokens.invalidate(); }
+            throw ex;
+        }
+    }
+    /** Internal frozen binding; authorization belongs to the calling orchestration service. */
+    public Map<String, Object> exportSkill(String assistantId, String skillId, String version, String type) {
+        try {
+            var result = http.getExport("/v2/assistants/" + IbmEndpointPolicy.identifier(assistantId) + "/skills_export",
+                    version, tokens.token(), Map.of());
+            if ("Failed".equals(result.get("status"))) { throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_FAILED", "A exportação IBM falhou."); }
+            if (!(result.get("assistant_skills") instanceof List<?> skills)) {
+                if ("Processing".equals(result.get("status")) || "Pending".equals(result.get("status"))) {
+                    throw error(HttpStatus.ACCEPTED, "IBM_EXPORT_PENDING", "Exportação em processamento. Repita a requisição após alguns segundos.");
+                }
+                throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_INVALID", "A IBM não retornou as skills exportadas.");
+            }
+            String expectedType = "DIALOG".equals(type) ? "dialog" : "action";
+            var matches = skills.stream().filter(Map.class::isInstance).map(Map.class::cast)
+                    .filter(s -> skillId.equals(s.get("skill_id")) && expectedType.equals(s.get("type"))).toList();
+            if (matches.size() != 1) { throw error(HttpStatus.BAD_GATEWAY, "IBM_EXPORT_SKILL_MISMATCH", "A exportação não contém exatamente a skill configurada."); }
+            @SuppressWarnings("unchecked") Map<String, Object> selected = matches.getFirst();
+            return selected;
+        } catch (IntegrationException ex) {
+            if ("IBM_AUTHENTICATION_FAILED".equals(ex.code())) tokens.invalidate();
             throw ex;
         }
     }

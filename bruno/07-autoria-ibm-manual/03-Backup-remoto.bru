@@ -1,0 +1,21 @@
+meta {
+  name: 03-Backup-remoto
+  type: http
+  seq: 54
+}
+
+get {
+  url: {{baseUrl}}/api/v1/ibm-writes/{{writeId}}/backup
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Execute individualmente, seguindo o README da collection.
+}

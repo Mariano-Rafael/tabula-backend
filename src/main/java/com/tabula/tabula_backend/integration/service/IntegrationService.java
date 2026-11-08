@@ -125,6 +125,8 @@ public class IntegrationService {
                 new Capability("READ_DIALOG_SKILL", true, t.dialogSkillId() != null, "NOT_VERIFIED"),
                 new Capability("READ_ACTION_SKILL", true, t.actionSkillId() != null, "NOT_VERIFIED"),
                 new Capability("SEND_MESSAGE", true, t.dialogWorkspaceId() != null || (t.assistantId() != null && t.environmentId() != null), "NOT_VERIFIED"),
+                new Capability("UPDATE_DRAFT_SKILL", true, t.environmentType() == EnvironmentType.DRAFT && t.assistantId() != null
+                        && (t.dialogSkillId() != null || t.actionSkillId() != null), "NOT_VERIFIED"),
                 new Capability("WRITE_FLOW", false, false, "NOT_IMPLEMENTED"));
     }
 

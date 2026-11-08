@@ -13,6 +13,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice(basePackageClasses = IntegrationController.class)
 public class IntegrationErrorHandler {
+    @ExceptionHandler(com.tabula.tabula_backend.flow.service.FlowException.class)
+    public ProblemDetail flow(com.tabula.tabula_backend.flow.service.FlowException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
     @ExceptionHandler(IntegrationException.class)
     public ProblemDetail integration(IntegrationException ex) { return problem(ex.status(), ex.code(), ex.getMessage()); }
     @ExceptionHandler(PortfolioException.class)

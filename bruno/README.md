@@ -1,6 +1,6 @@
 # Tabula — testes manuais no Bruno
 
-Abra esta pasta em **Open Collection** no Bruno. A collection contém 62 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
+Abra esta pasta em **Open Collection** no Bruno. A collection contém 68 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
 
 ## Preparação
 
@@ -17,6 +17,7 @@ Execute requisições individualmente. Não execute a collection inteira: existe
 - `04-ibm`: crie a integração com administrador global, consulte defaults Draft e crie o destino. O JSON de configuração é capturado sem credenciais. O PUT substitui a configuração inteira. Os probes podem responder HTTP 200 com `successful=false`; a listagem de assistants pode ser indisponível no plano IBM mesmo com recursos específicos acessíveis.
 - `05-fluxos`: escolha importação DIALOG, ACTION ou upload. Cada resposta passa a definir o fluxo/versão corrente. Se a exportação IBM retornar `202 IBM_EXPORT_PENDING`, repita a mesma requisição e chave após o intervalo indicado. Use somente versão `READY` para exportar/iniciar rascunho. O exemplo de edição é um Dialog vazio: substitua-o pelo JSON completo desejado. O ETag capturado inclui aspas e alimenta `If-Match`. Uma revisão antiga retorna 412; ausência retorna 428. Snapshot cria versão local e não publica na IBM.
 - `06-conversas`: use `mode=V2` para o Assistant com Dialog/Actions no ambiente Draft, inclusive o Dialog clássico chamado de “v1 dentro da v2”. Esse cenário não exige workspaceId: o modo representa a API usada, não o tipo de skill. Defina uma mensagem segura antes de enviar: o diálogo pode executar integrações externas. Abra, envie, consulte histórico e encerre. Somente a alternativa legada de chamada direta `mode=V1` requer `dialogWorkspaceId` válido no destino; `dialogSkillId` não substitui esse ID. Veja a [visão geral oficial IBM](https://cloud.ibm.com/docs/watson-assistant?topic=watson-assistant-api-overview).
+- `07-autoria-ibm-manual`: prepare a aplicação de uma versão READY a uma skill existente DRAFT, consulte a operação e baixe o backup. Preparação não altera IBM. Revise o JSON da versão via exportação local. **Apply altera o conteúdo remoto**; execute só após revisar destino/versão. Reconcile verifica o resultado sem reenviar. Troque `writeKey` para uma nova preparação; não troque para contornar UNKNOWN. Veja [contratos e limitações](../docs/17-autoria-ibm-draft.md). Se tiver um ambiente Local anterior, acrescente `writeKey` manualmente.
 - `90-administracao-manual`: criação/consulta de usuário e alterações de conta. Troca de senha invalida sessões; alteração de email também encerra a sessão. Autentique novamente quando necessário.
 - `99-encerramento-manual`: encerramento de sessão e alterações de estado/arquivamentos. Execute apenas nos recursos de teste escolhidos.
 

@@ -1,0 +1,21 @@
+meta {
+  name: 05-Reconciliar
+  type: http
+  seq: 56
+}
+
+post {
+  url: {{baseUrl}}/api/v1/ibm-writes/{{writeId}}/reconcile
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status esperado", function () {
+    expect([200,202,409,422]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Consulta estado e conteudo IBM; nunca reenvia atualizacao. UNKNOWN preserva bloqueio da skill ate confirmacao.
+}

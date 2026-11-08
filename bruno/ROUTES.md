@@ -54,6 +54,12 @@ Gerado de scripts/generate-bruno.cjs. Consulte README.md antes de executar.
 | 06-conversas | 07-Reconciliar-turno | POST | /conversations/{{conversationId}}/messages/{{turnId}}/reconcile |
 | 06-conversas | 08-Reconciliar-conversa | POST | /conversations/{{conversationId}}/reconcile |
 | 06-conversas | 09-Encerrar | POST | /conversations/{{conversationId}}/close |
+| 07-autoria-ibm-manual | 01-Preparar-Draft | POST | /projects/{{projectId}}/ibm-writes |
+| 07-autoria-ibm-manual | 02-Consultar-operacao | GET | /ibm-writes/{{writeId}} |
+| 07-autoria-ibm-manual | 02-Listar-operacoes | GET | /projects/{{projectId}}/ibm-writes?page=0&size=20 |
+| 07-autoria-ibm-manual | 03-Backup-remoto | GET | /ibm-writes/{{writeId}}/backup |
+| 07-autoria-ibm-manual | 04-Aplicar-Draft | POST | /ibm-writes/{{writeId}}/apply |
+| 07-autoria-ibm-manual | 05-Reconciliar | POST | /ibm-writes/{{writeId}}/reconcile |
 | 90-administracao-manual | 01-Criar-usuario | POST | /admin/users |
 | 90-administracao-manual | 02-Consultar-usuario | GET | /admin/users/{{userId}} |
 | 90-administracao-manual | 03-Atualizar-usuario | PATCH | /admin/users/{{userId}} |

@@ -21,6 +21,7 @@ fs.writeFileSync(path.join(root,'environments/Local.example.bru'), `vars {
   importDialogKey: import-dialog-CHANGE-ME-001
   importActionKey: import-action-CHANGE-ME-001
   snapshotKey: snapshot-CHANGE-ME-001
+  writeKey: write-CHANGE-ME-001
 }
 `);
 let seq=0; const inventory=[];
@@ -89,6 +90,12 @@ add('06-conversas','06-Consultar-turno','GET','/conversations/{{conversationId}}
 add('06-conversas','07-Reconciliar-turno','POST','/conversations/{{conversationId}}/messages/{{turnId}}/reconcile',null,{status:[200,202,422]});
 add('06-conversas','08-Reconciliar-conversa','POST','/conversations/{{conversationId}}/reconcile');
 add('06-conversas','09-Encerrar','POST','/conversations/{{conversationId}}/close',null,{status:[200,202]});
+add('07-autoria-ibm-manual','01-Preparar-Draft','POST','/projects/{{projectId}}/ibm-writes',{targetId:'{{targetId}}',versionId:'{{versionId}}'},{capture:'writeId',status:[201,202],headers:{'Idempotency-Key':'{{writeKey}}'},doc:'Prepara atualizacao da skill existente no Draft; nao envia mutacao. Usa uma versao local READY e armazena backup. Em IBM_EXPORT_PENDING repita mesma chave e corpo.'});
+add('07-autoria-ibm-manual','02-Consultar-operacao','GET','/ibm-writes/{{writeId}}');
+add('07-autoria-ibm-manual','02-Listar-operacoes','GET','/projects/{{projectId}}/ibm-writes?page=0&size=20');
+add('07-autoria-ibm-manual','03-Backup-remoto','GET','/ibm-writes/{{writeId}}/backup');
+add('07-autoria-ibm-manual','04-Aplicar-Draft','POST','/ibm-writes/{{writeId}}/apply',null,{status:[200,202,409,422],doc:'ALTERA CONTEUDO REAL DA SKILL DRAFT. Revise a versao local e o backup antes de enviar. Repetir nao reenvia uma operacao ja despachada. Nao publica em Live.'});
+add('07-autoria-ibm-manual','05-Reconciliar','POST','/ibm-writes/{{writeId}}/reconcile',null,{status:[200,202,409,422],doc:'Consulta estado e conteudo IBM; nunca reenvia atualizacao. UNKNOWN preserva bloqueio da skill ate confirmacao.'});
 add('90-administracao-manual','01-Criar-usuario','POST','/admin/users',{name:'Usuario Bruno',email:'{{testUserEmail}}',password:'{{testUserPassword}}',admin:false},{capture:'userId',status:[201]});
 add('90-administracao-manual','02-Consultar-usuario','GET','/admin/users/{{userId}}');
 add('90-administracao-manual','03-Atualizar-usuario','PATCH','/admin/users/{{userId}}',{name:'Usuario Bruno atualizado',admin:false,active:true});

@@ -50,6 +50,8 @@ class LocalFlowImportTests {
     @Autowired FlowWriteRepository outbox;
     @Autowired FlowDocumentStore documents;
     @Autowired FlowJsonCodec json;
+    @Autowired SkillWriteService skillWrites;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate sql;
 
     @Test
     void mongoAndMysqlPersistRealDialogAndActionExports() throws Exception {
@@ -90,9 +92,27 @@ class LocalFlowImportTests {
                 assertThat(second.number()).isEqualTo(2);
                 assertThat(service.export(actor, result.id())).isEqualTo(raw);
                 System.out.println("FLOW_LOCAL " + type.name() + " IMPORT_SNAPSHOT_DRAFT OK");
+                var writeRequest = new com.tabula.tabula_backend.integration.dto.SkillWriteDtos.Prepare(UUID.fromString(targetId), UUID.fromString(second.id()));
+                String writeKey = UUID.randomUUID().toString();
+                com.tabula.tabula_backend.integration.dto.SkillWriteDtos.View operation = null;
+                for (int attempt = 0; attempt < 8; attempt++) {
+                    try { operation = skillWrites.prepare(actor, projectId, writeRequest, writeKey); break; }
+                    catch (IntegrationException ex) {
+                        if (!"IBM_EXPORT_PENDING".equals(ex.code()) || attempt == 7) throw ex;
+                        Thread.sleep(1500);
+                    }
+                }
+                assertThat(operation).isNotNull();
+                assertThat(operation.state()).isEqualTo("READY");
+                assertThat(operation.baselineHash()).isEqualTo(operation.candidateHash());
+                assertThat(skillWrites.prepare(actor, projectId, writeRequest, writeKey).id()).isEqualTo(operation.id());
+                assertThat(json.checksum(skillWrites.backup(actor, operation.id()).baselineJson())).isEqualTo(operation.baselineHash());
+                System.out.println("FLOW_LOCAL " + type.name() + " WRITE_PREPARATION_BACKUP_ONLY OK");
             }
         } finally {
             if (projectId != null) {
+                db.getCollection("ibm_skill_write_documents").deleteMany(eq("projectId", projectId));
+                sql.update("DELETE FROM ibm_skill_writes WHERE project_id=?", projectId);
                 for (var flow : flows.findInProject(projectId, true, PageRequest.of(0, 100))) {
                     db.getCollection("flow_documents").deleteMany(and(eq("portfolioId", portfolioId), eq("flowId", flow.getId())));
                     db.getCollection("flow_drafts").deleteOne(and(eq("portfolioId", portfolioId), eq("_id", flow.getId())));
