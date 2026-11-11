@@ -62,6 +62,14 @@ class FlowModuleTests {
     @Autowired FlowLayoutService layoutService;
     @Autowired FlowDiagramService diagrams;
     @Autowired DialogNodeEditService nodeEdits;
+    @Autowired EditorVersionService editor;
+    @Autowired ClassicDialogTranslator translator;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate sql;
+    @Autowired SkillWriteService writes;
+    @MockitoBean DiagramDocumentStore diagramDocuments;
+    @MockitoBean com.tabula.tabula_backend.integration.repository.SkillWriteDocuments writeDocuments;
+    @MockitoBean com.tabula.tabula_backend.integration.client.IbmSkillWriteGateway writeGateway;
+    private final Map<String,com.tabula.tabula_backend.flow.dto.EditorDtos.Document> editorDocuments=new ConcurrentHashMap<>();
     private final Map<String, com.tabula.tabula_backend.flow.dto.FlowLayoutDtos.Stored> layoutData = new ConcurrentHashMap<>();
     private final Map<String, Snapshot> stored = new ConcurrentHashMap<>();
     private final Map<String, Draft> drafts = new ConcurrentHashMap<>();
@@ -72,6 +80,11 @@ class FlowModuleTests {
     @BeforeEach
     void setup() {
         cleanup(); stored.clear(); drafts.clear(); layoutData.clear();
+        editorDocuments.clear();
+        doAnswer(call -> { assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            var d=(com.tabula.tabula_backend.flow.dto.EditorDtos.Document)call.getArgument(0); editorDocuments.put(d.id(),d); return null;
+        }).when(diagramDocuments).put(any());
+        when(diagramDocuments.find(anyString(),anyString())).thenAnswer(call -> Optional.ofNullable(editorDocuments.get(call.getArgument(1))));
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
         when(layouts.find(anyString(), anyString())).thenAnswer(call -> Optional.ofNullable(layoutData.get(call.getArgument(1))));
         when(layouts.save(anyString(), anyString(), nullable(Long.class), anyString(), anyString(), anyString())).thenAnswer(call -> {
@@ -111,6 +124,8 @@ class FlowModuleTests {
     }
     @AfterEach
     void cleanup() {
+        sql.update("DELETE FROM ibm_skill_write_locks"); sql.update("DELETE FROM ibm_skill_writes");
+        sql.update("DELETE FROM diagram_versions"); sql.update("DELETE FROM diagram_flows");
         outbox.deleteAll(); versions.deleteAll(); flows.deleteAll(); targets.deleteAll(); integrationRepository.deleteAll();
         projects.deleteAll(); members.deleteAll(); portfolioRepository.deleteAll(); users.deleteAll();
     }
@@ -130,6 +145,32 @@ class FlowModuleTests {
         var v = service.upload(actor(owner), projectId, new Upload("Editable", FlowType.DIALOG, EDITABLE_RAW), key);
         service.startDraft(actor(owner), v.flowId(), v.id()); return v;
     }
+    @Test void visualLayoutNodesRoundTripWithoutChangingDraftOrVersion() throws Exception {
+        var v = editableDraft("visual-layout-nodes");
+        String url = "/api/v1/flows/" + v.flowId() + "/layout";
+        String raw = """
+            {"schemaVersion":1,"nodes":[
+              {"id":"visual:11111111-1111-4111-8111-111111111111","position":{"x":1,"y":2},"visualType":"text"},
+              {"id":"visual:22222222-2222-4222-8222-222222222222","position":{"x":3,"y":4},"visualType":"generative"},
+              {"id":"visual:33333333-3333-4333-8333-333333333333","position":{"x":5,"y":6},"visualType":"options"}
+            ],"viewport":{"x":0,"y":0,"zoom":1}}
+            """;
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-None-Match", "*").contentType("application/json").content(raw))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.nodes[1].visualType").value("generative"));
+        mvc.perform(get(url).with(as(owner))).andExpect(status().isOk()).andExpect(jsonPath("$.nodes[2].visualType").value("options"));
+        var draft = diagrams.draft(actor(owner), v.flowId());
+        var version = diagrams.version(actor(owner), v.id());
+        assertThat(draft.nodes().stream().filter(n -> "visual".equals(n.type())).map(n -> n.data().kind())).containsExactlyInAnyOrder("text", "generative", "options");
+        assertThat(version.nodes().stream().filter(n -> "visual".equals(n.type()))).hasSize(3).allMatch(n -> n.data().layoutOnly() && !n.data().editable());
+        assertThat(service.draft(actor(owner), v.flowId()).rawJson()).isEqualTo(EDITABLE_RAW);
+        assertThat(service.export(actor(owner), v.id())).isEqualTo(EDITABLE_RAW);
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(raw.replace("\"visualType\":\"text\"", "\"visualType\":\"unknown\"")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put(url).with(as(owner)).with(csrf()).header("If-Match", "\"layout-1\"").contentType("application/json").content(raw.replace("visual:11111111-1111-4111-8111-111111111111", "dialog:collision")))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(ibm);
+    }
+
     @Test void nodeCommandPreservesUnknownFieldsPrecisionAndOriginalVersion() throws Exception {
         var v = editableDraft("node-edit-preservation");
         layoutService.save(actor(owner), v.flowId(), null, "*", LAYOUT);
@@ -379,7 +420,9 @@ class FlowModuleTests {
 
     @Test
     void ibmPendingExportCreatesNoIncompleteSnapshotAndCanBeRetried() throws Exception {
-        UUID targetId = UUID.randomUUID();
+        String integration=integrations.create(actor(admin),portfolioId,new CreateIntegration("IBM")).id();
+        UUID targetId = UUID.fromString(integrations.createTarget(actor(owner),projectId,new CreateTarget(UUID.fromString(integration),
+                new TargetConfig("Draft",EnvironmentType.DRAFT,"assistant","environment",null,"dialog",null,"2021-11-27","2024-08-25"))).id());
         when(ibm.export(any(), eq(projectId), eq(targetId.toString()), eq("DIALOG")))
                 .thenThrow(new IntegrationException(HttpStatus.ACCEPTED, "IBM_EXPORT_PENDING", "Processing"))
                 .thenAnswer(call -> {
@@ -393,7 +436,7 @@ class FlowModuleTests {
         assertThat(versions.count()).isZero();
         mvc.perform(post("/api/v1/projects/" + projectId + "/imports").with(as(owner)).with(csrf())
                 .header("Idempotency-Key", "ibm-import-key").contentType("application/json").content(body))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.state").value("READY"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.version.number").value(1));
     }
 
     @Test
@@ -426,6 +469,163 @@ class FlowModuleTests {
             verify(documents, times(1)).putSnapshot(any());
         }
     }
+    @Test void legacyLocalUploadRemainsReadableUntilExplicitEditorMigration() throws Exception {
+        var input=new Upload("Canvas",FlowType.LOCAL,EditorVersionService.EMPTY);
+        var version=service.upload(actor(owner),projectId,input,"local-create-001");
+        String flow = version.flowId();
+        assertThat(metadata.find(actor(owner), flow).type()).isEqualTo(FlowType.LOCAL);
+        assertThat(service.upload(actor(owner),projectId,input,"local-create-001").id()).isEqualTo(version.id());
+        mvc.perform(post("/api/v1/flows/" + flow + "/draft").with(as(owner)).with(csrf())
+                .contentType("application/json").content("{\"versionId\":\"" + version.id() + "\"}"))
+                .andExpect(status().isOk()).andExpect(header().string("ETag", "\"1\""));
+        String canvas = """
+                {"schemaVersion":1,"nodes":[
+                  {"id":"a","type":"text","position":{"x":10,"y":20},"data":{"text":"Olá","custom":{"$key.with.dot":42}}},
+                  {"id":"b","position":{"x":300,"y":20},"data":{"label":"Fim"}}],
+                 "edges":[{"id":"a-b","source":"a","target":"b","sourceHandle":"yes","data":{"label":"Sim"}}],
+                 "viewport":{"x":10,"y":15,"zoom":0.75}}
+                """;
+        mvc.perform(put("/api/v1/flows/" + flow + "/draft").with(as(owner)).with(csrf())
+                .header("If-Match", "\"1\"").contentType("application/json").content(canvas))
+                .andExpect(status().isOk()).andExpect(header().string("ETag", "\"2\""))
+                .andExpect(jsonPath("$.edges[0].sourceHandle").value("yes"));
+        mvc.perform(put("/api/v1/flows/" + flow + "/draft").with(as(owner)).with(csrf())
+                .header("If-Match", "\"1\"").contentType("application/json").content(canvas)).andExpect(status().isPreconditionFailed());
+        var saved = mvc.perform(post("/api/v1/flows/" + flow + "/versions").with(as(owner)).with(csrf())
+                .header("If-Match", "\"2\"").header("Idempotency-Key", "local-snapshot-002"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.number").value(2)).andReturn();
+        var snapshot = json.readValue(saved.getResponse().getContentAsString(), VersionView.class);
+        assertThat(service.export(actor(owner), snapshot.id())).isEqualTo(canvas);
+        assertThat(service.export(actor(owner), version.id())).contains("\"nodes\":[]");
+        mvc.perform(get("/api/v1/flows/" + flow + "/draft").with(as(other))).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/flows/" + flow + "/diagram").with(as(owner))).andExpect(status().isUnprocessableEntity());
+        assertThatThrownBy(() -> layoutService.save(actor(owner), flow, null, "*", "{}"))
+                .isInstanceOf(FlowException.class);
+        assertThatThrownBy(() -> service.importIbm(actor(owner), projectId,
+                new IbmImport(UUID.randomUUID(), FlowType.DIALOG, null, UUID.fromString(flow)), "local-import-003"))
+                .isInstanceOf(FlowException.class);
+        assertThatThrownBy(() -> service.importIbm(actor(owner), projectId,
+                new IbmImport(UUID.randomUUID(), FlowType.LOCAL, null, null), "local-import-004"))
+                .isInstanceOf(FlowException.class);
+        verifyNoInteractions(ibm);
+    }
+
+    @Test void localCanvasRejectsBrokenGraphAndParentCycles() {
+        String empty = "{\"schemaVersion\":1,\"nodes\":[],\"edges\":[],\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1}}";
+        assertThat(codec.validate(empty, FlowType.LOCAL)).hasSize(64);
+        for (String invalid : List.of(empty.replace("\"schemaVersion\":1", "\"schemaVersion\":2"),
+                empty.replace("\"edges\":[]", "\"edges\":[{\"id\":\"e\",\"source\":\"missing\",\"target\":\"missing\"}]"),
+                empty.replace("\"nodes\":[]", "\"nodes\":[{\"id\":\"a\",\"parentId\":\"a\",\"position\":{\"x\":0,\"y\":0},\"data\":{}}]"),
+                empty.replace("\"zoom\":1", "\"zoom\":0"))) {
+            assertThatThrownBy(() -> codec.validate(invalid, FlowType.LOCAL)).isInstanceOf(FlowException.class);
+        }
+    }
+
+    @Test void editableVersionHttpLifecycleDuplicatesCompleteCanvasAndHasNoDraft() throws Exception {
+        var result=mvc.perform(post("/api/v1/projects/"+projectId+"/flows").with(as(owner)).with(csrf())
+                .header("Idempotency-Key","editor-create-001").contentType("application/json").content("{\"name\":\"Editor\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.version.number").value(1))
+                .andExpect(jsonPath("$.version.name").value("Versão 1")).andReturn();
+        var created=json.readValue(result.getResponse().getContentAsString(),com.tabula.tabula_backend.flow.dto.EditorDtos.Created.class);
+        String id=created.versionId(),flow=created.flowId();
+        assertThat(editor.create(actor(owner),projectId,new com.tabula.tabula_backend.flow.dto.EditorDtos.Create("Editor",null),"editor-create-001").versionId()).isEqualTo(id);
+        assertThat(metadata.find(actor(owner),flow).editorManaged()).isTrue();
+        String canvas=EditorVersionService.EMPTY.replace("\"nodes\":[]","\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"position\":{\"x\":55,\"y\":88},\"data\":{\"text\":\"Olá\",\"conditions\":\"welcome\"}}]")
+                .replace("\"variables\":{}","\"variables\":{\"counter\":123456789012345678901234567890}");
+        mvc.perform(put("/api/v1/versions/"+id+"/canvas").with(as(owner)).with(csrf()).header("If-Match","\"1\"")
+                .contentType("application/json").content(canvas)).andExpect(status().isOk()).andExpect(header().string("ETag","\"2\""));
+        var copy=mvc.perform(post("/api/v1/flows/"+flow+"/versions").with(as(owner)).with(csrf())
+                .header("Idempotency-Key","editor-copy-002").contentType("application/json")
+                .content("{\"name\":\"Cópia\",\"sourceVersionId\":\""+id+"\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.number").value(2)).andReturn();
+        var duplicate=json.readValue(copy.getResponse().getContentAsString(),com.tabula.tabula_backend.flow.dto.EditorDtos.Version.class);
+        assertThat(editor.read(actor(owner),duplicate.id()).rawJson()).isEqualTo(canvas);
+        editor.save(actor(owner),id,"\"2\"",EditorVersionService.EMPTY);
+        assertThat(editor.read(actor(owner),duplicate.id()).rawJson()).isEqualTo(canvas);
+        mvc.perform(patch("/api/v1/versions/"+duplicate.id()).with(as(owner)).with(csrf()).header("If-Match","\"1\"")
+                .contentType("application/json").content("{\"name\":\"Homologação\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Homologação")).andExpect(header().string("ETag","\"2\""));
+        var empty=editor.add(actor(owner),flow,new com.tabula.tabula_backend.flow.dto.EditorDtos.NewVersion("Vazia",null),"editor-empty-003");
+        assertThat(empty.number()).isEqualTo(3); assertThat(editor.read(actor(owner),empty.id()).rawJson()).isEqualTo(EditorVersionService.EMPTY);
+        mvc.perform(get("/api/v1/flows/"+flow+"/versions").with(as(owner))).andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(3));
+        mvc.perform(get("/api/v1/flows/"+flow+"/draft").with(as(owner))).andExpect(status().isGone());
+        mvc.perform(get("/api/v1/versions/"+id+"/canvas").with(as(other))).andExpect(status().isNotFound());
+        mvc.perform(put("/api/v1/versions/"+id+"/canvas").with(as(owner)).header("If-Match","\"3\"")
+                .contentType("application/json").content(canvas)).andExpect(status().isForbidden());
+        assertThat(versions.count()).isZero(); assertThat(drafts).isEmpty(); verifyNoInteractions(documents,ibm);
+    }
+
+    @Test void concurrentVersionSavesHaveOneWinnerAndMongoFailureNeverChangesSqlPointer() throws Exception {
+        var created=editor.create(actor(owner),projectId,new com.tabula.tabula_backend.flow.dto.EditorDtos.Create("Editor",null),"editor-create-001");
+        var start=new java.util.concurrent.CountDownLatch(1);
+        try(var executor=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var results=new ArrayList<java.util.concurrent.Future<Boolean>>();
+            for(int i=0;i<2;i++) results.add(executor.submit(()->{
+                start.await();
+                try { editor.save(actor(owner),created.versionId(),"\"1\"",EditorVersionService.EMPTY); return true; }
+                catch(FlowException ex) { assertThat(ex.code()).isEqualTo("VERSION_REVISION_MISMATCH"); return false; }
+            }));
+            start.countDown(); assertThat(List.of(results.get(0).get(),results.get(1).get())).containsExactlyInAnyOrder(true,false);
+        }
+        var before=editor.read(actor(owner),created.versionId());
+        doThrow(new FlowException(HttpStatus.SERVICE_UNAVAILABLE,"DIAGRAM_STORAGE_UNAVAILABLE","Unavailable")).when(diagramDocuments).put(any());
+        assertThatThrownBy(()->editor.save(actor(owner),created.versionId(),"\"2\"",EditorVersionService.EMPTY)).isInstanceOf(FlowException.class);
+        assertThat(editor.read(actor(owner),created.versionId())).isEqualTo(before);
+    }
+
+    @Test void linkedCanvasImportsExplicitlyAndPreparesFrozenClassicDialogPublication() throws Exception {
+        String integration=integrations.create(actor(admin),portfolioId,new CreateIntegration("IBM")).id();
+        String target=integrations.createTarget(actor(owner),projectId,new CreateTarget(UUID.fromString(integration),
+                new TargetConfig("Draft",EnvironmentType.DRAFT,"assistant","environment",null,"dialog",null,"2021-11-27","2024-08-25"))).id();
+        var created=editor.create(actor(owner),projectId,new com.tabula.tabula_backend.flow.dto.EditorDtos.Create("Editor",null),"editor-create-001");
+        editor.bind(actor(owner),created.flowId(),target); verifyNoInteractions(ibm);
+        Map<String,Object> skill=Map.of("type","dialog","custom",Map.of("kept",true),"workspace",Map.of("intents",List.of(),"dialog_nodes",List.of(
+                Map.of("dialog_node","hello","type","standard","conditions","welcome","output",Map.of("generic",List.of(Map.of("response_type","text","values",List.of(Map.of("text","Olá")))))))));
+        when(ibm.export(actor(owner),projectId,target,"DIALOG")).thenReturn(skill);
+        var imported=editor.importIbm(actor(owner),created.versionId(),"\"1\"");
+        assertThat(imported.version().revision()).isEqualTo(2); assertThat(imported.rawJson()).contains("ibmDialog","hello","custom");
+        when(ibm.exportSkill("assistant","dialog","2024-08-25","DIALOG")).thenReturn(skill);
+        when(writeGateway.update(any(),anyMap())).thenReturn(Map.of("status","Processing"));
+        var writeCopies=new ConcurrentHashMap<String,com.tabula.tabula_backend.integration.dto.SkillWriteDtos.Documents>();
+        doAnswer(call->{var d=(com.tabula.tabula_backend.integration.dto.SkillWriteDtos.Documents)call.getArgument(0); writeCopies.put(d.id(),d); return null;}).when(writeDocuments).put(any());
+        when(writeDocuments.get(anyString(),anyString())).thenAnswer(call->writeCopies.get(call.getArgument(1)));
+        assertThatThrownBy(()->editor.publish(actor(owner),created.versionId(),"\"2\"","editor-publish-001",false)).isInstanceOf(FlowException.class);
+        var prepared=editor.publish(actor(owner),created.versionId(),"\"2\"","editor-publish-001",true);
+        assertThat(prepared.state()).isEqualTo("READY");
+        editor.save(actor(owner),created.versionId(),"\"2\"",EditorVersionService.EMPTY);
+        assertThat(writes.apply(actor(owner),prepared.id()).state()).isEqualTo("PROCESSING");
+        verify(writeGateway).update(any(),argThat(workspace -> workspace.toString().contains("hello")));
+        assertThat(writeCopies.get(prepared.id()).candidateJson()).contains("hello");
+    }
+
+    @Test void legacyMigrationPreservesOldVersionsLayoutAndWorkingContentWithoutFurtherDrafts() {
+        var old=upload("legacy-create-001"); service.startDraft(actor(owner),old.flowId(),old.id());
+        String changed=RAW.replace("\"dialog_nodes\":[]","\"dialog_nodes\":[{\"dialog_node\":\"new\",\"conditions\":\"true\"}]");
+        service.updateDraft(actor(owner),old.flowId(),"\"1\"",changed);
+        var migrated=editor.migrate(actor(owner),old.flowId());
+        assertThat(migrated).hasSize(2); assertThat(migrated.get(1).name()).isEqualTo("Trabalho anterior");
+        assertThat(editor.read(actor(owner),migrated.get(1).id()).rawJson()).contains("new");
+        assertThat(service.export(actor(owner),old.id())).isEqualTo(RAW);
+        assertThatThrownBy(()->service.draft(actor(owner),old.flowId())).isInstanceOfSatisfying(FlowException.class,ex->assertThat(ex.code()).isEqualTo("FLOW_DRAFT_REMOVED"));
+        assertThat(editor.migrate(actor(owner),old.flowId())).hasSize(2);
+    }
+
+    @Test void editorRejectsCrossFlowDuplicationViewerWritesAndArchivedChanges() throws Exception {
+        var a=editor.create(actor(owner),projectId,new com.tabula.tabula_backend.flow.dto.EditorDtos.Create("A",null),"editor-create-001");
+        var b=editor.create(actor(owner),projectId,new com.tabula.tabula_backend.flow.dto.EditorDtos.Create("B",null),"editor-create-002");
+        assertThatThrownBy(()->editor.add(actor(owner),b.flowId(),new com.tabula.tabula_backend.flow.dto.EditorDtos.NewVersion("Invalid",UUID.fromString(a.versionId())),"editor-copy-cross"))
+                .isInstanceOfSatisfying(FlowException.class,ex->assertThat(ex.code()).isEqualTo("FLOW_VERSION_MISMATCH"));
+        portfolios.addMember(actor(owner),portfolioId,new PortfolioDtos.AddMember(UUID.fromString(other.getId()),PortfolioRole.VIEWER));
+        mvc.perform(get("/api/v1/versions/"+a.versionId()+"/canvas").with(as(other))).andExpect(status().isOk());
+        mvc.perform(put("/api/v1/versions/"+a.versionId()+"/canvas").with(as(other)).with(csrf()).header("If-Match","\"1\"")
+                .contentType("application/json").content(EditorVersionService.EMPTY)).andExpect(status().isForbidden());
+        assertThatThrownBy(()->editor.publish(actor(owner),a.versionId(),"\"1\"","editor-publish-01",true))
+                .isInstanceOfSatisfying(FlowException.class,ex->assertThat(ex.code()).isEqualTo("IBM_FLOW_NOT_LINKED"));
+        metadata.archive(actor(owner),a.flowId());
+        assertThatThrownBy(()->editor.save(actor(owner),a.versionId(),"\"1\"",EditorVersionService.EMPTY)).isInstanceOf(FlowException.class);
+        assertThat(editor.read(actor(owner),a.versionId()).version().revision()).isEqualTo(1);
+    }
+
     private VersionView upload(String key) { return service.upload(actor(owner), projectId, new Upload("Test", FlowType.DIALOG, RAW), key); }
     private AccountUser user(boolean admin) { return users.saveAndFlush(new AccountUser("Test", UUID.randomUUID() + "@example.invalid", "unused", admin)); }
     private static AccountPrincipal actor(AccountUser u) { return new AccountPrincipal(u.getId(), u.getAuthVersion()); }

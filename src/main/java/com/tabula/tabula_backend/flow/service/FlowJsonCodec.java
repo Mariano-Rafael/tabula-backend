@@ -25,6 +25,10 @@ public class FlowJsonCodec {
 
     public String validate(String raw, FlowType type) {
         Object parsed = parse(raw);
+        if (type == FlowType.LOCAL) {
+            LocalCanvasValidator.validate(parsed);
+            return hash(encode(sorted(parsed, 0)));
+        }
         if (!(parsed instanceof Map<?, ?> skill) || !(skill.get("workspace") instanceof Map<?, ?> workspace)
                 || !(type == FlowType.DIALOG ? "dialog" : "action").equals(skill.get("type"))
                 || !(workspace.get(type == FlowType.DIALOG ? "dialog_nodes" : "actions") instanceof List<?>)) {

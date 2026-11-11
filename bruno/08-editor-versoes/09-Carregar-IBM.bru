@@ -1,0 +1,26 @@
+meta {
+  name: 09-Carregar-IBM
+  type: http
+  seq: 108
+}
+
+post {
+  url: {{baseUrl}}/api/v1/versions/{{versionId}}/ibm-import
+  body: none
+  auth: none
+}
+
+headers {
+  If-Match: {{versionEtag}}
+}
+
+script:post-response {
+  if (res.getStatus() < 300) {
+    bru.setVar("versionEtag", res.getHeader("etag"));
+  }
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

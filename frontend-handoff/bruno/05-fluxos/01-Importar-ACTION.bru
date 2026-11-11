@@ -29,10 +29,10 @@ script:post-response {
 
 tests {
   test("Status esperado", function () {
-    expect([201,202]).to.include(res.getStatus());
+    expect(res.getStatus()).to.equal(422);
   });
 }
 
 docs {
-  Pode retornar 202 IBM_EXPORT_PENDING. Repita com a mesma chave e corpo. Atualiza flowId/versionId; trabalhe em um fluxo por vez.
+  O novo editor inicia por Dialog classico. Importar ACTION como novo fluxo retorna 422 ACTION_EDITOR_NOT_IMPLEMENTED; dados Action legados continuam preservados.
 }

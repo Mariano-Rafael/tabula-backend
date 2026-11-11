@@ -22,6 +22,8 @@ import tools.jackson.databind.*;
  */
 @Service
 public class SkillWriteService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate sql;
     private final IntegrationService integrations;
     private final PortfolioService portfolios;
     private final FlowMetadataService versions;
@@ -74,6 +76,9 @@ public class SkillWriteService {
             throw error(HttpStatus.NOT_FOUND, "FLOW_VERSION_MISMATCH");
         }
         var flow = versions.editable(actor, version.flowId());
+        if (flow.type() == FlowType.LOCAL) {
+            throw error(HttpStatus.UNPROCESSABLE_ENTITY, "LOCAL_FLOW_IBM_UNSUPPORTED");
+        }
         String skillId = flow.type() == FlowType.DIALOG ? c.dialogSkillId() : c.actionSkillId();
         if (c.assistantId() == null || skillId == null) {
             throw error(HttpStatus.UNPROCESSABLE_ENTITY, "IBM_SKILL_REQUIRED");
@@ -100,6 +105,36 @@ public class SkillWriteService {
         var row = ledger.get(id);
         portfolios.project(actor, row.view().projectId());
         return row.view();
+    }
+
+    /** Freezes translated editor content using the same backup, locks and apply/reconcile protocol. */
+    public View prepareDiagram(AccountPrincipal actor,String projectId,String targetId,String versionId,String skillJson,String requestKey) {
+        portfolios.requireProjectEditing(actor,projectId);
+        if(sql.queryForObject("SELECT COUNT(*) FROM diagram_versions v JOIN diagram_flows f ON f.flow_id=v.flow_id WHERE v.id=? AND v.project_id=? AND f.target_id=?",
+                Integer.class,versionId,projectId,targetId)!=1) throw error(HttpStatus.NOT_FOUND,"FLOW_VERSION_MISMATCH");
+        String key=FlowService.key(requestKey);
+        codec.validate(skillJson,FlowType.DIALOG);
+        String candidate=workspace(parse(skillJson));
+        String hash=codec.requestHash(Map.of("operation","EDITOR_DIALOG","targetId",targetId,"versionId",versionId,"candidate",codec.checksum(candidate)));
+        var replay=ledger.existing(projectId,key);
+        if(replay.isPresent()) {
+            if(!hash.equals(replay.get().requestHash())) throw error(HttpStatus.CONFLICT,"IDEMPOTENCY_CONFLICT");
+            return replay.get().view();
+        }
+        var target=integrations.targetForExport(actor,targetId);
+        if(!projectId.equals(target.projectId())) throw error(HttpStatus.NOT_FOUND,"TARGET_PROJECT_MISMATCH");
+        var c=target.configuration();
+        if(c.environmentType()!=EnvironmentType.DRAFT) throw error(HttpStatus.CONFLICT,"IBM_DRAFT_REQUIRED");
+        if(c.assistantId()==null||c.dialogSkillId()==null) throw error(HttpStatus.UNPROCESSABLE_ENTITY,"IBM_SKILL_REQUIRED");
+        var binding=new Binding(c.assistantId(),c.dialogSkillId(),c.v2Version(),integrations.connectionReference(target.integrationId()));
+        String baseline=workspace(export(binding,"DIALOG"));
+        String id=UUID.randomUUID().toString();
+        var view=new View(id,projectId,targetId,versionId,"DIALOG","PREPARING",codec.checksum(baseline),codec.checksum(candidate),actor.id(),Instant.now().toString(),null);
+        ledger.insert(new Row(view,codec.encode(binding),resourceHash(binding),hash,SkillWriteLedger.deadline()),key);
+        try {
+            documents.put(new Documents(id,projectId,baseline,candidate)); ledger.ready(id);
+        } catch(RuntimeException ex) { ledger.finish(id,"FAILED","IBM_WRITE_DOCUMENT_UNAVAILABLE"); throw ex; }
+        return ledger.get(id).view();
     }
 
     public com.tabula.tabula_backend.portfolio.dto.PortfolioDtos.PageView<View> list(AccountPrincipal actor, String projectId, int page, int size) {
@@ -201,6 +236,10 @@ public class SkillWriteService {
             throw error(HttpStatus.CONFLICT, "IBM_WRITE_TARGET_CHANGED");
         }
         if (active) {
+            var editorFlows=sql.queryForList("SELECT flow_id FROM diagram_versions WHERE id=?",String.class,row.view().versionId());
+            if(!editorFlows.isEmpty()) versions.editable(actor,editorFlows.getFirst());
+            var links=sql.queryForList("SELECT f.target_id FROM diagram_flows f JOIN diagram_versions v ON v.flow_id=f.flow_id WHERE v.id=?",String.class,row.view().versionId());
+            if(!links.isEmpty()&&!Objects.equals(links.getFirst(),row.view().targetId())) throw error(HttpStatus.CONFLICT,"IBM_WRITE_TARGET_CHANGED");
             var target = integrations.targetForExport(actor, row.view().targetId());
             if (!Objects.equals(b.connection(), integrations.connectionReference(target.integrationId()))) throw error(HttpStatus.CONFLICT, "IBM_WRITE_TARGET_CHANGED");
             var current = target.configuration();

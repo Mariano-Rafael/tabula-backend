@@ -1,0 +1,16 @@
+meta {
+  name: 02-Listar-versoes
+  type: http
+  seq: 101
+}
+
+get {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/versions
+  body: none
+  auth: none
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

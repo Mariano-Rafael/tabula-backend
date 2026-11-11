@@ -81,3 +81,21 @@ Gerado de scripts/generate-bruno.cjs. Consulte README.md antes de executar.
 | 99-encerramento-manual | Arquivar-projeto | DELETE | /projects/{{projectId}} |
 | 99-encerramento-manual | Arquivar-portfolio | DELETE | /portfolios/{{portfolioId}} |
 | 99-encerramento-manual | Logout | POST | /auth/logout |
+| 05-fluxos | Criar-canvas-local | POST | /projects/{{projectId}}/local-flows |
+| 05-fluxos | Salvar-canvas-local | PUT | /flows/{{flowId}}/draft |
+
+## Editor atual — versões editáveis sem rascunho
+
+Use a pasta `08-editor-versoes`. A criação retorna versionId da versão 1.
+
+| Método | Rota `/api/v1` |
+|---|---|
+| POST | `/projects/{{projectId}}/flows` |
+| GET | `/flows/{{flowId}}/versions` |
+| GET / PUT | `/versions/{{versionId}}/canvas` |
+| POST | `/flows/{{flowId}}/versions` (duplicar ou criar vazia) |
+| PATCH | `/versions/{{versionId}}` |
+| PUT | `/flows/{{flowId}}/ibm-binding` |
+| POST | `/versions/{{versionId}}/ibm-import` |
+| POST | `/versions/{{versionId}}/ibm-publications` (preparar substituição) |
+| POST | `/flows/{{flowId}}/migrate-editor` |

@@ -1,5 +1,7 @@
 # Tabula frontend — pacote de continuidade
 
+Atualizado com o [contrato atual de versões editáveis sem rascunho](docs/versoes-editaveis-e-vinculo-ibm.md), vínculo IBM independente e collection `08-editor-versoes`. Leia esse guia antes de implementar o editor.
+
 Preparado em 08/11/2026 a partir da árvore local de `tabula-backend`. Este pacote transfere decisões e contratos; não cria o frontend nem transporta automaticamente o histórico da conversa.
 
 ## Levar ao novo repositório

@@ -31,6 +31,8 @@ public class FlowLayoutService {
 
     public View find(AccountPrincipal actor, String flowId) {
         var flow = metadata.find(actor, flowId);
+        if(flow.editorManaged()) throw error(HttpStatus.GONE,"VERSION_CANVAS_REQUIRED");
+        requireIbm(flow.type());
         String portfolioId = portfolios.project(actor, flow.projectId()).portfolioId();
         var stored = store.find(portfolioId, flowId).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "LAYOUT_NOT_FOUND"));
         return verified(stored, portfolioId, flowId);
@@ -38,12 +40,20 @@ public class FlowLayoutService {
 
     public View save(AccountPrincipal actor, String flowId, String ifMatch, String ifNoneMatch, String raw) {
         var flow = metadata.editable(actor, flowId);
+        if(flow.editorManaged()) throw error(HttpStatus.GONE,"VERSION_CANVAS_REQUIRED");
+        requireIbm(flow.type());
         String portfolioId = portfolios.project(actor, flow.projectId()).portfolioId();
         Long expected = revision(ifMatch, ifNoneMatch);
         var input = parse(raw);
         String normalized = json.writeValueAsString(input);
         var saved = store.save(portfolioId, flowId, expected, normalized, codec.checksum(normalized), actor.id());
         return verified(saved, portfolioId, flowId);
+    }
+
+    private void requireIbm(com.tabula.tabula_backend.flow.dto.FlowDtos.FlowType type) {
+        if (type == com.tabula.tabula_backend.flow.dto.FlowDtos.FlowType.LOCAL) {
+            throw error(HttpStatus.UNPROCESSABLE_ENTITY, "LOCAL_CANVAS_USE_DRAFT");
+        }
     }
 
     private View verified(Stored s, String portfolioId, String flowId) {
@@ -70,7 +80,10 @@ public class FlowLayoutService {
         Map<String, Node> nodes = new HashMap<>();
         for (var node : input.nodes()) {
             if (node == null || !identifier(node.id()) || node.position() == null || !coordinate(node.position().x()) || !coordinate(node.position().y())
-                    || !dimension(node.width()) || !dimension(node.height()) || (node.parentId() != null && !identifier(node.parentId())) || nodes.put(node.id(), node) != null) {
+                    || !dimension(node.width()) || !dimension(node.height()) || (node.parentId() != null && !identifier(node.parentId()))
+                    || (node.visualType() != null && (!node.id().matches("visual:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                        || !Set.of("text", "generative", "options").contains(node.visualType())))
+                    || nodes.put(node.id(), node) != null) {
                 throw invalid();
             }
         }

@@ -33,7 +33,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = "ibm.watson.service-url=https://api.us-south.assistant.watson.cloud.ibm.com/instances/test")
+@SpringBootTest(properties = {
+        "ibm.watson.service-url=https://api.us-south.assistant.watson.cloud.ibm.com/instances/test",
+        "ibm.watson.credentials-encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="})
 class SkillWriteModuleTests {
     @Autowired UserRepository users;
     @Autowired PortfolioRepository portfolioRepository;
@@ -213,6 +215,44 @@ class SkillWriteModuleTests {
         when(flows.export(any(), eq(versionId))).thenReturn("{\"type\":\"action\",\"workspace\":{\"actions\":[]}}");
         var op = prepare("prepare-key-001"); service.apply(actor, op.id());
         verify(gateway).update(eq(new Binding("assistant", "action", "2024-08-25")), eq(Map.of("actions", List.of())));
+    }
+    @Test void httpUpdatesClassicDialogUsingRegisteredIdsAndIsolatedConnectionWithoutWorkspaceId() throws Exception {
+        String isolatedPortfolio = portfolios.create(actor, new PortfolioDtos.Create("Isolated", null)).id();
+        String isolatedProject = portfolios.createProject(actor, isolatedPortfolio, new PortfolioDtos.Create("IBM", null)).id();
+        String integration = integrations.create(actor, isolatedPortfolio, new CreateIntegration("IBM isolated",
+                "https://api.us-south.assistant.watson.cloud.ibm.com/instances/registered-instance", "fake-key")).id();
+        var configuration = new TargetConfig("Dialog", EnvironmentType.DRAFT, "registered-assistant", "registered-environment",
+                null, "registered-dialog", null, "2021-11-27", "2024-08-25");
+        String target = integrations.createTarget(actor, isolatedProject, new CreateTarget(UUID.fromString(integration), configuration)).id();
+        when(versions.version(any(), eq(versionId))).thenReturn(new FlowDtos.VersionView(versionId, flowId, isolatedProject,
+                1, "READY", "unused", "UPLOAD", null, actor.id(), "now", null));
+        when(versions.editable(any(), eq(flowId))).thenReturn(new FlowDtos.View(flowId, isolatedProject, "Dialog", FlowDtos.FlowType.DIALOG, false));
+        var connection = integrations.connectionReference(integration);
+        var binding = new Binding("registered-assistant", "registered-dialog", "2024-08-25", connection);
+        when(exports.exportSkill("registered-assistant", "registered-dialog", "2024-08-25", "DIALOG", connection))
+                .thenReturn(Map.of("workspace", BEFORE));
+        mvc.perform(post("/api/v1/projects/" + isolatedProject + "/ibm-writes")
+                        .with(authentication(auth(actor))).with(csrf()).header("Idempotency-Key", "registered-dialog-001")
+                        .contentType("application/json").content("{\"targetId\":\"" + target + "\",\"versionId\":\"" + versionId + "\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.state").value("READY"));
+        var operation = service.list(actor, isolatedProject, 0, 20).content().get(0);
+        mvc.perform(post("/api/v1/ibm-writes/" + operation.id() + "/apply").with(authentication(auth(actor))).with(csrf()))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.state").value("PROCESSING"));
+        mvc.perform(post("/api/v1/ibm-writes/" + operation.id() + "/apply").with(authentication(auth(actor))).with(csrf()))
+                .andExpect(status().isAccepted());
+        verify(gateway, times(1)).update(eq(binding), eq(AFTER));
+        when(gateway.status(binding)).thenReturn(Map.of("status", "Available"));
+        when(exports.exportSkill("registered-assistant", "registered-dialog", "2024-08-25", "DIALOG", connection))
+                .thenReturn(Map.of("workspace", AFTER));
+        mvc.perform(post("/api/v1/ibm-writes/" + operation.id() + "/reconcile").with(authentication(auth(actor))).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
+    }
+    @Test void localCanvasCannotBePreparedForIbmUpdate() {
+        when(versions.editable(any(), eq(flowId))).thenReturn(new FlowDtos.View(flowId, projectId, "Local", FlowDtos.FlowType.LOCAL, false));
+        assertThatThrownBy(() -> prepare("local-write-blocked"))
+                .isInstanceOfSatisfying(IntegrationException.class, ex -> assertThat(ex.code()).isEqualTo("LOCAL_FLOW_IBM_UNSUPPORTED"));
+        verifyNoInteractions(exports, gateway, documents);
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM ibm_skill_writes", Integer.class)).isZero();
     }
     private View prepare(String key) { return service.prepare(actor, projectId, new Prepare(UUID.fromString(targetId), UUID.fromString(versionId)), key); }
     private TargetConfig config(EnvironmentType type) { return new TargetConfig("Draft", type, "assistant", "environment", null, "dialog", "action", "2021-11-27", "2024-08-25"); }

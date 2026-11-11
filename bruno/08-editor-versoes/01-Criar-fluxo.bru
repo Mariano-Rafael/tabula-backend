@@ -1,0 +1,39 @@
+meta {
+  name: 01-Criar-fluxo
+  type: http
+  seq: 100
+}
+
+post {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}/flows
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: {{editorCreateKey}}
+}
+
+body:json {
+  {
+    "name": "Novo fluxo"
+  }
+}
+
+script:pre-request {
+  if (!bru.getVar("editorCreateKey")) bru.setVar("editorCreateKey", "editorCreateKey-" + Date.now());
+}
+
+script:post-response {
+  if (res.getStatus() < 300) {
+    bru.setVar("flowId", res.getBody().flowId);
+    bru.setVar("versionId", res.getBody().versionId);
+    bru.setVar("versionEtag", '"' + res.getBody().version.revision + '"');
+  }
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

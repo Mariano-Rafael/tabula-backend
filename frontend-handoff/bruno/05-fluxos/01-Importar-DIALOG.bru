@@ -24,7 +24,7 @@ body:json {
 }
 
 script:post-response {
-  if (res.getStatus() < 300 && res.getBody().id) { bru.setVar("versionId", res.getBody().id); bru.setVar("flowId", res.getBody().flowId); }
+  if (res.getStatus() < 300 && res.getBody().versionId) { bru.setVar("versionId", res.getBody().versionId); bru.setVar("flowId", res.getBody().flowId); bru.setVar("versionEtag", '"' + res.getBody().version.revision + '"'); }
 }
 
 tests {

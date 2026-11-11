@@ -1,0 +1,38 @@
+meta {
+  name: 10-Preparar-publicacao
+  type: http
+  seq: 109
+}
+
+post {
+  url: {{baseUrl}}/api/v1/versions/{{versionId}}/ibm-publications
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  If-Match: {{versionEtag}}
+  Idempotency-Key: {{editorPublicationKey}}
+}
+
+body:json {
+  {
+    "confirmOverwrite": true
+  }
+}
+
+script:pre-request {
+  if (!bru.getVar("editorPublicationKey")) bru.setVar("editorPublicationKey", "editorPublicationKey-" + Date.now());
+}
+
+script:post-response {
+  if (res.getStatus() < 300) {
+    if (res.getBody().id) bru.setVar("writeId", res.getBody().id);
+  }
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

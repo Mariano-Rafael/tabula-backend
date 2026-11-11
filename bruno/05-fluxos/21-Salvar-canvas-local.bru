@@ -1,0 +1,40 @@
+meta {
+  name: 21-Salvar-canvas-local
+  type: http
+  seq: 52
+}
+
+put {
+  url: {{baseUrl}}/api/v1/versions/{{versionId}}/canvas
+  body: json
+  auth: none
+}
+
+headers {
+  If-Match: {{versionEtag}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "schemaVersion":1,
+    "nodes":[
+      {"id":"inicio","type":"text","position":{"x":0,"y":0},"data":{"label":"Inicio"}},
+      {"id":"fim","type":"text","position":{"x":300,"y":0},"data":{"label":"Fim"}}
+    ],
+    "edges":[{"id":"inicio-fim","source":"inicio","target":"fim","sourceHandle":"continuar"}],
+    "viewport":{"x":0,"y":0,"zoom":1}
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) bru.setVar("versionEtag", res.getHeader("etag"));
+}
+
+tests {
+  test("Canvas salvo", function () { expect(res.getStatus()).to.equal(200); });
+}
+
+docs {
+  Salva o documento completo na versao atual. Para duplicar, use 08-editor-versoes/05-Duplicar-versao; nao ha snapshot de rascunho.
+}

@@ -1,0 +1,16 @@
+meta {
+  name: 11-Migrar-legado
+  type: http
+  seq: 110
+}
+
+post {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/migrate-editor
+  body: none
+  auth: none
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

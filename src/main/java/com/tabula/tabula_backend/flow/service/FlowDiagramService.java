@@ -20,12 +20,14 @@ public class FlowDiagramService {
     }
 
     public View draft(AccountPrincipal actor, String flowId) {
+        requireIbm(actor, flowId);
         var draft = flows.draft(actor, flowId);
         return projector.project(flowId, "DRAFT", null, draft.revision(), draft.rawJson(), layout(actor, flowId));
     }
 
     public View version(AccountPrincipal actor, String versionId) {
         var version = metadata.version(actor, versionId);
+        requireIbm(actor, version.flowId());
         var raw = flows.export(actor, versionId);
         return projector.project(version.flowId(), "VERSION", versionId, null, raw, layout(actor, version.flowId()));
     }
@@ -38,6 +40,13 @@ public class FlowDiagramService {
                 return null;
             }
             throw ex;
+        }
+    }
+
+    private void requireIbm(AccountPrincipal actor, String flowId) {
+        if (metadata.find(actor, flowId).type() == com.tabula.tabula_backend.flow.dto.FlowDtos.FlowType.LOCAL) {
+            throw new FlowException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "LOCAL_CANVAS_USE_DRAFT",
+                    "Leia o documento completo do canvas pela rota de rascunho ou exportação da versão.");
         }
     }
 }

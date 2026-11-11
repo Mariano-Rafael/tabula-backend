@@ -9,9 +9,13 @@ public final class FlowDtos {
     private FlowDtos() {
     }
 
-    public enum FlowType {DIALOG, ACTION}
+    public enum FlowType {DIALOG, ACTION, LOCAL}
 
-    public record Upload(@NotBlank @Size(max = 120) String name, @NotNull FlowType type, @NotBlank String json) {
+    public record CreateLocal(@NotBlank @Size(max = 120) String name) {
+    }
+
+    public record Upload(@NotBlank @Size(max = 120) String name, FlowType type, String json, UUID targetId) {
+        public Upload(String name,FlowType type,String json) { this(name,type,json,null); }
     }
 
     public record IbmImport(@NotNull UUID targetId, @NotNull FlowType type, @Size(max = 120) String name, UUID flowId) {
@@ -23,7 +27,8 @@ public final class FlowDtos {
     public record StartDraft(@NotNull UUID versionId) {
     }
 
-    public record View(String id, String projectId, String name, FlowType type, boolean archived) {
+    public record View(String id, String projectId, String name, FlowType type, boolean archived, boolean editorManaged, String targetId) {
+        public View(String id,String projectId,String name,FlowType type,boolean archived) { this(id,projectId,name,type,archived,false,null); }
         public static View from(Flow f) {
             return new View(f.getId(), f.getProjectId(), f.getName(), FlowType.valueOf(f.getType()), f.isArchived());
         }

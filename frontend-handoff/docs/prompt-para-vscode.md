@@ -4,7 +4,7 @@ Copie o texto abaixo para a nova conversa do agente no repositório frontend:
 
 ---
 
-Estamos continuando o projeto Tabula em um repositório frontend separado. Leia primeiro AGENTS.md, docs/contexto-do-projeto.md, docs/integracao-backend.md e docs/plano-inicial-frontend.md. Os guias do backend e a collection Bruno foram copiados para referência. Se o backend estiver no workspace, confira os controllers/DTOs atuais antes de assumir contratos.
+Estamos continuando o projeto Tabula em um repositório frontend separado. Leia primeiro AGENTS.md, docs/versoes-editaveis-e-vinculo-ibm.md, docs/contexto-do-projeto.md, docs/integracao-backend.md e docs/plano-inicial-frontend.md. O guia de versões editáveis prevalece sobre descrições anteriores do editor. Os guias do backend e a collection Bruno foram copiados para referência. Se o backend estiver no workspace, confira os controllers/DTOs atuais antes de assumir contratos.
 
 Use React com TypeScript strict e Vite. A diretriz de stack inclui React Router, TanStack Query, Tailwind + shadcn/ui, React Hook Form + Zod e, posteriormente, Zustand e @xyflow/react para o editor. Confira as versões estáveis compatíveis ao iniciar.
 
@@ -12,7 +12,7 @@ Comece implementando a estrutura do frontend e a autenticação real: proxy /api
 
 Use português do Brasil na interface e trate carregamento, vazio, erro, credenciais inválidas e sessão expirada. Não considere integração concluída com mocks. Execute as verificações do projeto e testes relevantes.
 
-O backend Java/MySQL/MongoDB já existe. O usuário decidiu adiar o tradutor e a edição completa do diagrama. Não implemente agora runtime próprio, backend alternativo, publicação Live ou conversão de um diagrama parcial em JSON IBM completo. As credenciais reais não estão neste pacote: obtenha o acesso pelo fluxo de login/telas apropriadas, sem copiar o .env do backend.
+O backend Java/MySQL/MongoDB já existe. O editor agora salva versões editáveis completas, sem rascunho, com versão 1 na criação, duplicação, renomeação, versão vazia e vínculo IBM opcional/posterior. Importação e preparação da publicação têm rotas próprias. O backend possui tradutor inicial de Dialog clássico; siga seu contrato e trate erros de incompatibilidade. Não implemente runtime próprio, backend alternativo, tradutor paralelo no navegador ou publicação Live. As credenciais reais não estão neste pacote: obtenha acesso pelo login/telas apropriadas, sem copiar o .env do backend.
 
 ---
 

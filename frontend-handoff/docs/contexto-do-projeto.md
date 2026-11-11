@@ -1,5 +1,7 @@
 # Contexto do Tabula para o frontend
 
+> Atualização do editor: consulte [versões editáveis e vínculo IBM](versoes-editaveis-e-vinculo-ibm.md). O novo modelo não usa rascunhos: salvar edita a versão, duplicar copia tudo, criar fluxo retorna a versão 1. Os detalhes antigos abaixo ficam como histórico quando conflitarem com o contrato novo.
+
 Referência: 08/11/2026. O backend foi inspecionado na árvore local, incluindo alterações não commitadas. Não assuma que só clonar seu HEAD reproduz todos os recursos descritos.
 
 ## Produto e decisões

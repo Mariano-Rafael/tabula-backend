@@ -160,7 +160,16 @@ public class FlowDiagramProjector {
         }
         for (var v : visual.values()) {
             if (!sourceNodes.containsKey(v.id())) {
-                if (groups.contains(v.id())) {
+                if (v.visualType() != null) {
+                    String label = switch (v.visualType()) {
+                        case "text" -> "Texto Padrão";
+                        case "generative" -> "Resposta Generativa";
+                        case "options" -> "Opções";
+                        default -> throw new IllegalStateException("Tipo visual inválido");
+                    };
+                    sourceNodes.put(v.id(), new Node(v.id(), "visual", v.position(), null, Map.of(),
+                            new Data(label, null, null, v.visualType(), null, false, true, false, Map.of())));
+                } else if (groups.contains(v.id())) {
                     sourceNodes.put(v.id(), new Node(v.id(), "group", v.position(), null, Map.of(),
                             new Data("Grupo visual", null, null, "visual_group", null, false, true, Boolean.TRUE.equals(v.collapsed()), Map.of())));
                 } else {

@@ -1,6 +1,6 @@
 # Tabula — testes manuais no Bruno
 
-Abra esta pasta em **Open Collection** no Bruno. A collection contém 77 requisições, com corpos, testes de status e captura de variáveis. O inventário completo está em [ROUTES.md](ROUTES.md).
+Abra esta pasta em **Open Collection** no Bruno. A collection contém 90 requisições. Para o novo editor, use **08-editor-versoes** e [o contrato de versões editáveis](../docs/25-versoes-editaveis-e-vinculo-ibm.md). A criação já retorna versionId da versão 1; não inicie rascunho. As requisições antigas de rascunho/layout são para dados legados antes da migração. O inventário está em [ROUTES.md](ROUTES.md).
 
 ## Preparação
 

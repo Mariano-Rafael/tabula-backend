@@ -12,7 +12,10 @@ public final class FlowLayoutDtos {
     public record Position(Double x, Double y) {
     }
 
-    public record Node(String id, Position position, String parentId, Double width, Double height, Boolean collapsed) {
+    public record Node(String id, Position position, String parentId, Double width, Double height, Boolean collapsed, String visualType) {
+        public Node(String id, Position position, String parentId, Double width, Double height, Boolean collapsed) {
+            this(id, position, parentId, width, height, collapsed, null);
+        }
     }
 
     public record Viewport(Double x, Double y, Double zoom) {

@@ -30,6 +30,7 @@ public class FlowService {
 
     public VersionView upload(AccountPrincipal actor, String projectId, Upload input, String requestKey) {
         portfolios.requireProjectEditing(actor, projectId);
+        if(input.type()==null || input.json()==null) throw error(HttpStatus.BAD_REQUEST,"INVALID_FLOW_FORMAT","Informe tipo e conteúdo para upload legado.");
         String key = key(requestKey);
         String checksum = json.validate(input.json(), input.type());
         String hash = json.requestHash(Map.of("operation", "UPLOAD", "name", input.name(), "type", input.type(), "checksum", checksum));
@@ -41,6 +42,15 @@ public class FlowService {
     }
 
     public VersionView importIbm(AccountPrincipal actor, String projectId, IbmImport input, String requestKey) {
+        portfolios.requireProjectEditing(actor, projectId);
+        if (input.type() == FlowType.LOCAL) {
+            throw error(HttpStatus.UNPROCESSABLE_ENTITY, "LOCAL_FLOW_IBM_UNSUPPORTED", "Fluxos locais não podem ser importados da IBM.");
+        }
+        if (input.flowId() != null) {
+            var destination=metadata.editable(actor,input.flowId().toString());
+            requireLegacy(destination);
+            if(destination.type()==FlowType.LOCAL) throw error(HttpStatus.UNPROCESSABLE_ENTITY, "LOCAL_FLOW_IBM_UNSUPPORTED", "Use importação por versão no editor.");
+        }
         String key = key(requestKey);
         String hash = json.requestHash(Map.of("operation", "IBM", "request", input));
         var existing = metadata.existing(actor, projectId, key, hash);
@@ -65,7 +75,7 @@ public class FlowService {
     }
 
     public Draft startDraft(AccountPrincipal actor, String flowId, String versionId) {
-        metadata.editable(actor, flowId);
+        requireLegacy(metadata.editable(actor, flowId));
         var version = metadata.version(actor, versionId);
         if (!flowId.equals(version.flowId())) {
             throw error(HttpStatus.NOT_FOUND, "FLOW_VERSION_MISMATCH", "Versão não pertence ao fluxo.");
@@ -80,6 +90,7 @@ public class FlowService {
 
     public Draft draft(AccountPrincipal actor, String flowId) {
         var flow = metadata.find(actor, flowId);
+        requireLegacy(flow);
         String portfolioId = portfolios.project(actor, flow.projectId()).portfolioId();
         var draft = documents.draft(portfolioId, flowId).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "DRAFT_NOT_FOUND", "Rascunho não encontrado."));
         if (!flowId.equals(draft.flowId()) || !portfolioId.equals(draft.portfolioId()) || !draft.checksum().equals(json.checksum(draft.rawJson()))) {
@@ -90,6 +101,7 @@ public class FlowService {
 
     public Draft updateDraft(AccountPrincipal actor, String flowId, String ifMatch, String raw) {
         var flow = metadata.editable(actor, flowId);
+        requireLegacy(flow);
         String portfolioId = portfolios.project(actor, flow.projectId()).portfolioId();
         long revision = revision(ifMatch);
         String checksum = json.validate(raw, flow.type());
@@ -98,6 +110,7 @@ public class FlowService {
 
     public VersionView snapshotDraft(AccountPrincipal actor, String flowId, String ifMatch, String requestKey) {
         var flow = metadata.editable(actor, flowId);
+        requireLegacy(flow);
         long revision = revision(ifMatch);
         String key = key(requestKey);
         String hash = json.requestHash(Map.of("operation", "DRAFT", "flowId", flowId, "revision", revision));
@@ -180,6 +193,10 @@ public class FlowService {
             throw error(HttpStatus.BAD_REQUEST, "INVALID_DRAFT_ETAG", "ETag do rascunho inválido.");
         }
         return Long.parseLong(value.substring(1, value.length() - 1));
+    }
+
+    private static void requireLegacy(View flow) {
+        if(flow.editorManaged()) throw error(HttpStatus.GONE,"FLOW_DRAFT_REMOVED","Edite diretamente uma versão do diagrama; este fluxo não usa rascunho.");
     }
 
     private static FlowException error(HttpStatus status, String code, String detail) {

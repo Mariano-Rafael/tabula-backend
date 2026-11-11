@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.*;
 @Service
 @Transactional(isolation = Isolation.READ_COMMITTED)
 public class FlowMetadataService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate sql;
     private final FlowRepository flows;
     private final FlowVersionRepository versions;
     private final FlowWriteRepository outbox;
@@ -71,23 +73,23 @@ public class FlowMetadataService {
 
     @Transactional(readOnly = true)
     public View find(AccountPrincipal actor, String flowId) {
-        return View.from(flow(actor, flowId, false));
+        return view(flow(actor, flowId, false));
     }
 
     public View editable(AccountPrincipal actor, String flowId) {
-        return View.from(flow(actor, flowId, true));
+        return view(flow(actor, flowId, true));
     }
 
     @Transactional(readOnly = true)
     public PageView<View> list(AccountPrincipal actor, String projectId, boolean includeArchived, int page, int size) {
         portfolios.project(actor, projectId);
-        return PageView.from(flows.findInProject(projectId, includeArchived, paging(page, size)).map(View::from));
+        return PageView.from(flows.findInProject(projectId, includeArchived, paging(page, size)).map(this::view));
     }
 
     public View rename(AccountPrincipal actor, String id, String name) {
         var f = flow(actor, id, true);
         f.rename(name(name));
-        return View.from(f);
+        return view(f);
     }
 
     public void archive(AccountPrincipal actor, String id) {
@@ -134,6 +136,11 @@ public class FlowMetadataService {
     @Transactional(readOnly = true)
     public boolean leaseExpired(String id) {
         return outbox.findById(id).orElseThrow(FlowMetadataService::notFound).getLeaseUntil() <= System.currentTimeMillis();
+    }
+
+    private View view(Flow flow) {
+        var links=sql.queryForList("SELECT target_id FROM diagram_flows WHERE flow_id=?",String.class,flow.getId());
+        return new View(flow.getId(),flow.getProjectId(),flow.getName(),FlowType.valueOf(flow.getType()),flow.isArchived(),!links.isEmpty(),links.isEmpty()?null:links.getFirst());
     }
 
     private Flow flow(AccountPrincipal actor, String id, boolean edit) {

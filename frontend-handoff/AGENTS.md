@@ -2,9 +2,11 @@
 
 ## Contexto obrigatório
 
+Leia primeiro `docs/versoes-editaveis-e-vinculo-ibm.md`: esse contrato substitui as instruções históricas de rascunho, snapshot imutável e layout separado abaixo. Novos fluxos têm versões editáveis, criam/abrem a versão 1, permitem duplicação integral, renomeação e versão vazia. O vínculo IBM é independente do canvas; o tradutor inicial de Dialog clássico já existe. Não use o ciclo legado para telas novas.
+
 Leia `docs/contexto-do-projeto.md`, `docs/integracao-backend.md` e `docs/plano-inicial-frontend.md` antes de implementar. Este repositório é o frontend React/TypeScript de um backend Java já existente. Consulte `reference/backend-docs` e `bruno` para contratos. Se o backend estiver no workspace, controllers/DTOs e testes atuais são a fonte de verdade.
 
-A primeira entrega é estrutura e autenticação integradas à API real. Prossiga depois para portfólios, projetos, conexão IBM, destinos, importação e visualização do diagrama. O tradutor do editor e a edição visual completa foram adiados; não os trate como pré-requisito para as telas iniciais.
+A primeira entrega é estrutura e autenticação integradas à API real. Prossiga depois para portfólios, projetos, conexão IBM, destinos e editor de versões. O backend agora tem salvamento integral de canvas e tradutor inicial de Dialog clássico; Actions e conversão universal continuam pendentes.
 
 ## Stack e organização
 
@@ -25,22 +27,23 @@ A primeira entrega é estrutura e autenticação integradas à API real. Prossig
 - Não chame IBM diretamente do navegador. Criação de portfólio/vínculo/importação ocorre pela API Tabula.
 - Crie uma chave de idempotência por intenção e mantenha-a no reenvio da mesma intenção/corpo. Não configure retry automático de mutations que possam enviar mensagens ou aplicar conteúdo remoto.
 - Respostas 202 podem ser ProblemDetail, não o DTO esperado. Verifique content-type, `code` e `state`, inclusive em status 2xx.
-- Preserve ETags incluindo aspas: rascunho `"1"`, layout `"layout-1"`. Conflito 412 deve ser exibido e resolvido; não repita uma sobrescrita automaticamente com uma revisão nova.
+- Preserve ETags incluindo aspas: versão `"1"`. Conflito 412 deve ser exibido e resolvido; não repita uma sobrescrita automaticamente com uma revisão nova.
 
 ## Editor
 
-- O JSON IBM original é a fonte preservada no backend. O diagrama é parcial; nunca gere um JSON substituto com apenas os nós/arestas visíveis ou `data.original` serializado pelo navegador.
-- IDs visuais `nodes[].id` servem para layout. `data.sourceId` é o ID IBM usado na edição limitada; `sourceRef` só vale na revisão de origem.
-- Movimentar nós altera estado local; salvar layout envia apenas o contrato visual. Não envie `ReactFlowInstance.toObject()` inteiro ao endpoint de layout.
-- Relações PARENT/EVALUATION_ORDER não significam execução incondicional. Não invente transições a partir de posição, ordem do array ou condições.
-- Actions ainda mostram apenas nós de ação; passos internos e tradutor completo estão pendentes. `readOnly`/`editable` indicam capacidade do formato, não permissão do usuário.
-- Aplicar uma versão no Draft IBM é uma ação explícita do usuário. Não apresente isso como publicação em Live.
+- Criar fluxo retorna flowId/versionId da versão 1; navegue diretamente para ela. Ofereça vínculo IBM opcional, que também pode ser cadastrado depois.
+- Use `/versions/{id}/canvas` para ler/salvar documento completo. Não crie rascunho nem use layout separado para novos fluxos.
+- Salvar altera a versão selecionada. Duplicar copia conteúdo, posições, conexões e variáveis no servidor. Nova versão sem sourceVersionId nasce vazia. Permita renomear com ETag.
+- Campo ibm preserva a skill original importada. Preserve precisão numérica com parser lossless ao modificar esse conteúdo no navegador.
+- Carregar da IBM e publicar são ações explícitas, independentes do vínculo. Avise que importar substitui a versão local e publicar substitui o workspace remoto no Draft.
+- Use o contrato inicial de nós text/ibmDialog standard, conditions, text e relações PARENT/EVALUATION_ORDER/JUMP do guia atual. Estruturas incompatíveis retornam 422; não simule sucesso nem descarte elementos.
+- Preparar publicação congela o conteúdo. Depois use apply/reconcile existentes. Não apresente atualização Draft como implantação Live.
 
 ## Desenvolvimento
 
 - Priorize rotas reais; mocks só em testes/desenvolvimento explicitamente identificado. Não apresente mocks como integração concluída.
 - Proteja navegação conforme sessão e permissões; durante restauração da sessão, use estado de carregamento para evitar redirecionamentos prematuros.
 - Trate loading, vazio, erro, sessão expirada e conflito nas telas implementadas. Interface e mensagens em português do Brasil.
-- Não invente endpoints de listagem de usuários, recuperação de senha, descoberta completa IBM, salvamento conjunto de diagrama/layout ou publicação Live: ainda não existem.
+- Não invente endpoints de listagem de usuários, recuperação de senha, descoberta completa IBM ou publicação Live: ainda não existem.
 - Teste comportamentos relevantes: cookies/CSRF e sessão, erros estruturados, permissões, ETag, idempotência e fluxos críticos. Execute typecheck/build e verificações do projeto antes de concluir.
 - Atualize a documentação quando um contrato/decisão mudar. Se houver uma lacuna na API, descreva-a com evidência do backend antes de propor mudança.

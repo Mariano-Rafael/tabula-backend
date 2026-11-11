@@ -1,0 +1,38 @@
+meta {
+  name: 06-Versao-vazia
+  type: http
+  seq: 105
+}
+
+post {
+  url: {{baseUrl}}/api/v1/flows/{{flowId}}/versions
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: {{editorEmptyKey}}
+}
+
+body:json {
+  {
+    "name": "Versão vazia"
+  }
+}
+
+script:pre-request {
+  if (!bru.getVar("editorEmptyKey")) bru.setVar("editorEmptyKey", "editorEmptyKey-" + Date.now());
+}
+
+script:post-response {
+  if (res.getStatus() < 300) {
+    bru.setVar("versionId", res.getBody().id);
+    bru.setVar("versionEtag", res.getHeader("etag"));
+  }
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

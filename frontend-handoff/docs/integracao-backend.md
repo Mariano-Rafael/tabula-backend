@@ -1,5 +1,7 @@
 # Integração do frontend com a API Tabula
 
+> Para o editor, use [o contrato atual de versões editáveis](versoes-editaveis-e-vinculo-ibm.md). Ele substitui os contratos de rascunho, snapshot e layout separado deste guia para novos fluxos.
+
 Fotografia dos controllers/DTOs em 08/11/2026. Base: `/api/v1`. IDs são UUIDs em strings. A collection e [o inventário completo](../reference/rotas-backend.md) complementam este guia. Quando acessível, o código backend atual prevalece.
 
 ## Ambiente e conexão

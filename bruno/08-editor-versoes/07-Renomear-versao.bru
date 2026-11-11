@@ -1,0 +1,33 @@
+meta {
+  name: 07-Renomear-versao
+  type: http
+  seq: 106
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/versions/{{versionId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  If-Match: {{versionEtag}}
+}
+
+body:json {
+  {
+    "name": "Homologação"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() < 300) {
+    bru.setVar("versionEtag", res.getHeader("etag"));
+  }
+}
+
+docs {
+  Execute individualmente. Consulte docs/25-versoes-editaveis-e-vinculo-ibm.md. Importar substitui a versao local. Publicar prepara substituicao do Dialog Draft; revisar backup, executar apply e reconcile na pasta 07. Limpe a chave de idempotencia para uma nova intencao.
+}
+

@@ -27,6 +27,12 @@ O Tabula será uma plataforma de gestão de fluxos e atendimentos, inicialmente 
 19. [Projeção estrutural dos diagramas](19-projecao-de-diagramas.md)
 20. [Instâncias IBM por portfólio](20-instancias-ibm-por-portfolio.md)
 21. [Edição semântica de nós Dialog](21-edicao-semantica-dialog.md)
+22. [Continuidade no frontend e VS Code](../../README.md)
+
+23. [Atualizar Dialog clássico pelo Assistant V2](23-atualizar-dialog-classico-v2.md)
+24. [Fluxos locais do canvas](24-fluxos-locais-canvas.md)
+
+25. [Versões editáveis e vínculo IBM independente — contrato atual do editor](25-versoes-editaveis-e-vinculo-ibm.md)
 
 ## Status das decisões
 

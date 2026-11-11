@@ -1,0 +1,40 @@
+meta {
+  name: 20-Criar-canvas-local
+  type: http
+  seq: 51
+}
+
+post {
+  url: {{baseUrl}}/api/v1/projects/{{projectId}}/local-flows
+  body: json
+  auth: none
+}
+
+headers {
+  Idempotency-Key: {{localCreateKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {"name":"Canvas local"}
+}
+
+script:pre-request {
+  if (!bru.getVar("localCreateKey")) bru.setVar("localCreateKey", "local-create-" + Date.now());
+}
+
+script:post-response {
+  if (res.getStatus() < 300 && res.getBody().versionId) {
+    bru.setVar("versionId", res.getBody().versionId);
+    bru.setVar("flowId", res.getBody().flowId);
+    bru.setVar("versionEtag", '"' + res.getBody().version.revision + '"');
+  }
+}
+
+tests {
+  test("Criacao local", function () { expect([201,202]).to.include(res.getStatus()); });
+}
+
+docs {
+  A versao 1 ja esta editavel. Use 08-editor-versoes/03-Ler-canvas. Nao inicialize rascunho. Limpe localCreateKey para criar outro fluxo.
+}

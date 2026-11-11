@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1")
 public class FlowDiagramController {
     private final FlowDiagramService service;
+    private final com.tabula.tabula_backend.flow.service.EditorVersionService editor;
 
-    public FlowDiagramController(FlowDiagramService service) {
+    public FlowDiagramController(FlowDiagramService service,com.tabula.tabula_backend.flow.service.EditorVersionService editor) {
         this.service = service;
+        this.editor = editor;
     }
 
     @GetMapping("/flows/{id}/diagram")
@@ -25,7 +27,12 @@ public class FlowDiagramController {
     }
 
     @GetMapping("/versions/{id}/diagram")
-    public ResponseEntity<View> version(@AuthenticationPrincipal AccountPrincipal actor, @PathVariable UUID id) {
+    public ResponseEntity<?> version(@AuthenticationPrincipal AccountPrincipal actor, @PathVariable UUID id) {
+        if(editor.hasVersion(id.toString())) {
+            var result=editor.read(actor,id.toString());
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).cacheControl(CacheControl.noStore())
+                    .eTag("\""+result.version().revision()+"\"").body(result.rawJson());
+        }
         return result(service.version(actor, id.toString()));
     }
 
